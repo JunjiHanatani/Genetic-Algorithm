@@ -1,0 +1,241 @@
+#include <iostream>
+#include <cstdlib>
+#include <algorithm>
+#include <vector>
+#include <numeric>
+#include <iterator>
+#include <random>
+#include <cmath>
+#include <fstream>
+#include <time.h>
+#include <functional>
+
+using std::cout;
+using std::endl;
+using std::vector;
+
+// MAP
+const int N_PTS = 1000;
+vector<vector<double>> point_table(N_PTS, vector<double>(2));
+
+// GA parameter
+const int N_POP = 100;
+
+// Results
+int MAX_EVALS = 50000000;
+int PATH_OUT_FREQ = MAX_EVALS;
+int num_evals = 0;
+
+std::ofstream ofs_history("./history.csv");
+std::ofstream ofs_bestpath("./bestpath.csv");
+std::ifstream ifs("./TSP2.txt");
+
+vector<int> best_ind;
+double best_fitness;
+double best_path[N_PTS][2];
+vector<double> history;
+
+// Random Seed
+std::random_device seed_gen;
+std::mt19937 mt_engine(seed_gen());
+
+
+int get_rand_range_int(int min_val, int max_val) {
+    std::uniform_int_distribution<int> gen_rand_uni_int( min_val, max_val );
+    return gen_rand_uni_int(mt_engine);
+}
+
+double get_rand_range_dbl(double min_val, double max_val) {
+    std::uniform_real_distribution<double> gen_rand_uni_real( min_val, max_val );
+    return gen_rand_uni_real(mt_engine);
+}
+
+int findIndex( vector<int> vec, int value ){
+    vector<int>::iterator iter = std::find( vec.begin(), vec.end(), value);
+    size_t index = std::distance( vec.begin(), iter );
+    if(index == vec.size())
+        {
+            return -1;
+        }
+    return index;
+}
+
+/* Create random path */
+
+vector<vector<int>> create_initial_pop(){
+
+    vector<vector<int>> pop(N_POP, vector<int>(N_PTS));
+    vector<int> vec(N_PTS);
+
+    //Original Vector
+    for (int i=0; i<N_PTS; ++i){vec[i]=i;};
+
+    //Create population
+    for (int i=0; i<N_POP; i++){
+        // Shuffle
+        // obtain a device-based seed:
+        std::shuffle(vec.begin(), vec.end(), mt_engine);
+        pop[i] = vec;
+    }
+
+    return pop;
+}
+
+/* Evaluation */
+
+double fitness_func(vector<int> const &path){
+
+    double distance = 0.0;
+
+    for(int i=0; i<N_PTS; i++){
+
+        int index0 = path[i];
+        int index1 = path[i + 1];
+        if(i==N_PTS-1) index1 = path[0];
+
+        double x0 = point_table[index0][0];
+        double y0 = point_table[index0][1];
+        double x1 = point_table[index1][0];
+        double y1 = point_table[index1][1];
+
+        distance = distance +
+                   std::sqrt((x1 - x0)*(x1 - x0) + (y1 - y0)*(y1 - y0));
+    }
+
+    return 1.0/distance;
+
+}
+
+/* Output function */
+
+void sort_pop(vector<vector<int>> &pop, vector<double> const &scores){
+
+    int num = pop.size();
+    vector<vector<int>> sorted_pop(num, vector<int>(N_PTS));
+    vector<int> indices(num);
+
+    std::iota(indices.begin(), indices.end(), 0);
+
+    std::sort(indices.begin(),
+              indices.end(),
+              [&](int i, int j){return scores[i] > scores[j];}
+    );
+
+    for (int i=0; i<num; i++) sorted_pop[i] = pop[indices[i]];
+    pop = sorted_pop;
+
+}
+
+void output(vector<int> const &best_ind, double const &global_best, bool file_output){
+
+    if (file_output){
+
+        ofs_history << num_evals << ", " << global_best << endl;
+
+        if ( (num_evals + 1) % PATH_OUT_FREQ == 0){
+            for (int i=0; i<N_PTS; i++){
+                best_path[i][0] = point_table[best_ind[i]][0];
+                best_path[i][1] = point_table[best_ind[i]][1];
+                ofs_bestpath << best_path[i][0] << ", " << best_path[i][1] << endl;
+            }
+            ofs_bestpath << best_path[0][0] << ", " << best_path[0][1] << endl;
+        }
+
+    }
+
+}
+
+/* One step hill-climb */
+
+void hillclimb(vector<int> &best_vec, double &best_score, bool &climbing_is_done){
+
+    bool move_made = false;
+    vector<int> vec = best_vec;
+
+    for (int i=0; i<N_PTS; i++){
+        for (int j=0; j<N_PTS; j++){
+
+            vec = best_vec;
+            // Exchange two cities.
+            int tmp = vec[i];
+            vec[i] = vec[j];
+            vec[j] = tmp;
+
+            // Evaluate the new vector.
+            double score = fitness_func(vec);
+            num_evals += 1;
+
+            // if the best vector updates, move on next climb.
+            if (score > best_score){
+                best_vec = vec;
+                best_score = score;
+                move_made = true;
+                break;
+            }
+
+            // if num_evals reaches the max number, the calculation ends.
+            if (num_evals >= MAX_EVALS){
+                climbing_is_done = true;
+                break;
+            }
+
+        }
+        if (move_made == true) break;
+        if (climbing_is_done == true) break;
+    }
+
+    if (move_made == false){
+        climbing_is_done = true;
+    }
+
+}
+
+
+int main(){
+
+    // Set problem.
+    std::string str;
+    int i=0;
+    while(getline(ifs, str)) {
+		sscanf(str.data(), "%lf,%lf", &point_table[i][0], &point_table[i][1]);
+        i++;
+        if (i==N_PTS) break;
+    }
+
+    // Initial population
+    vector<vector<int>> pop = create_initial_pop();
+
+    // Evaluation
+    vector<double> scores(N_POP);
+    for (int i=0; i<N_POP; i++) scores[i] = fitness_func(pop[i]);
+    sort_pop(pop, scores);
+    double global_best = fitness_func(pop[0]);
+
+    // Output
+    output(pop[0], global_best, true);
+
+    for (int i=0; i<N_POP; i++){
+
+        bool climbing_is_done = false;
+
+        while (climbing_is_done==false){
+            hillclimb(pop[i], scores[i], climbing_is_done);
+
+            cout << "Evaluations: " << num_evals
+                 << " / Best Fitness: " << scores[i]
+                 << " / Move: " << climbing_is_done
+                 << endl;
+
+            if(global_best<scores[i]);
+                global_best = scores[i];
+                // --- Output
+                output(pop[i], global_best, true);
+
+        }
+
+        if (num_evals >= MAX_EVALS) break;
+    }
+
+    return 0;
+}
+
