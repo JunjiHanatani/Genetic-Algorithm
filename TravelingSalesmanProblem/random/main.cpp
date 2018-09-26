@@ -16,7 +16,7 @@ using std::vector;
 using std::string;
 
 // Problem Type
-std::ifstream ifs("./TSP1.txt");
+std::ifstream ifs("../sample/TSP1.txt");
 const string problem_type = "MIN";          // "MIN" or "MAX"
 
 // Read data

@@ -17,7 +17,7 @@ using std::vector;
 using std::string;
 
 // Problem Type
-std::ifstream ifs("./TSP1.txt");
+std::ifstream ifs("../sample/TSP1.txt");
 const string problem_type = "MIN";    // "MIN" or "MAX"
 
 // Read data
@@ -25,7 +25,7 @@ const int N_PTS = 1000;
 vector<vector<double>> point_table(N_PTS, vector<double>(2));
 
 // Output
-int MAX_EVALS = 10000000;
+int MAX_EVALS = 1000000;
 int PATH_OUT_FREQ = MAX_EVALS;
 int num_evals = 0;
 std::ofstream ofs_history("./history.csv");
