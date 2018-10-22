@@ -1,0 +1,652 @@
+#include <math.h>
+#include <fstream>
+#include <sstream>
+#include <iostream>
+#include <string.h>
+#include <vector>
+#include <GL/glut.h>
+#include <png.h>
+#include "opengl.h"
+#include "cube_model.h"
+
+using std::cout;
+using std::endl;
+using std::string;
+using std::vector;
+
+// Paraeter
+const double PI = acos(-1.0);
+const double SCALE = 500.0;
+
+// Window Setting
+const int WindowPositionX = 200;  //Window x position
+const int WindowPositionY = 200;  //Window y position
+const int WindowWidth = 1200;    //Window width
+const int WindowHeight = 800;    //Window height
+const char WindowTitle[] = "Cubic Robot";  //Window title
+
+// Output video
+bool _Rec = false;
+bool _AutoView = false;
+bool _ControlView = true;
+
+bool _Friction = false;
+bool _Damping = false;
+bool _Breathe = false;
+
+vector<double> nudgeForce = {0.0, 0.0, 0.0};
+int nudgeID = -1;
+int captured_frame = 0;
+//----------------------------------------------------
+// Initial Viewpoint
+//----------------------------------------------------
+const double InitialViewPointX = 0.0;
+const double InitialViewPointY = -500.0;
+const double InitialViewPointZ = 100.0;
+const double ViewPointR = sqrt(InitialViewPointX * InitialViewPointX + InitialViewPointY * InitialViewPointY);
+const double ViewPointTheta = atan2(InitialViewPointY, InitialViewPointX);
+const double omega = 2.0 * PI * 0.1;
+
+//----------------------------------------------------
+// Rotation by mouse action
+//----------------------------------------------------
+
+int cx, cy;                // Drag start position
+double sx = 1.0 / (double)512; // Transform coefficient from absolute position of mouse to relative position in the window
+double sy = 1.0 / (double)512;
+double cq[7] = { 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };  // Initial orientation (Quaternion)
+double tq[7];              // Orientation during dragging (Quaternion)
+double rt[16];              // Rotation transform matrix
+int mouse_button_on = -1;
+
+unsigned int listNumber;
+
+//----------------------------------------------------
+// Texture
+//----------------------------------------------------
+struct MaterialStruct {
+  GLfloat ambient[4];
+  GLfloat diffuse[4];
+  GLfloat specular[4];
+  GLfloat shininess;
+};
+//jade
+MaterialStruct ms_jade = {
+  {0.135,     0.2225,   0.1575,   1.0},
+  {0.54,      0.89,     0.63,     1.0},
+  {0.316228,  0.316228, 0.316228, 1.0},
+  12.8};
+//ruby
+MaterialStruct ms_ruby  = {
+  {0.1745,   0.01175,  0.01175,   1.0},
+  {0.61424,  0.04136,  0.04136,   1.0},
+  {0.727811, 0.626959, 0.626959,  1.0},
+  76.8};
+
+//----------------------------------------------------
+// Color
+//----------------------------------------------------
+GLfloat red[] = { 0.8, 0.2, 0.2, 1.0 };
+GLfloat green[] = { 0.2, 0.8, 0.2, 1.0 };
+GLfloat blue[] = { 0.2, 0.2, 0.8, 1.0 };
+GLfloat yellow[] = { 0.8, 0.8, 0.2, 1.0 };
+GLfloat white[] = { 1.0, 1.0, 1.0, 1.0 };
+GLfloat shininess = 30.0;
+
+//----------------------------------------------------
+// Initialize function
+//----------------------------------------------------
+void Initialize(void){
+
+  glClearColor(1.0, 1.0, 1.0, 1.0); //Assign background color. (R, G, B, alpha)
+  glEnable(GL_DEPTH_TEST);//Use depth buffer: (Assign GLUT_DEPTH using glutInitDisplayMode())
+
+  //Set a light source --------------------------------------
+  GLfloat light_position0[] = { 0.0, -100.0, -100.0, 1.0 }; //Coordinate of a light source 0
+  glLightfv(GL_LIGHT0, GL_POSITION, light_position0); //
+
+  // Create display list
+  listNumber = glGenLists(1);
+  glNewList( listNumber, GL_COMPILE );
+  glEndList();
+
+// Set a perspective projection matrix ------------------------------
+  glMatrixMode(GL_PROJECTION);//Matrix mode (GL PROJECTION: Perspective projection matrix)
+  glLoadIdentity();//Initialize a matrix
+  gluPerspective(30.0, (double)WindowWidth/(double)WindowHeight, 0.1, 1000.0); //Apparent volume gluPerspactive(th, w/h, near, far);
+
+  //Viewpoint
+  gluLookAt(
+      InitialViewPointX, InitialViewPointY, InitialViewPointZ, // Viewpoint: x,y,z;
+      0.0,        0.0,        0.0,        // Reference point: x,y,z
+      0.0,        0.0,        1.0 );      //Vector: x,y,z
+
+  // Initialize rotate matrix
+  qrot(rt, cq);
+}
+
+//----------------------------------------------------
+// Display function
+//----------------------------------------------------
+void Display(void) {
+  //Clear buffer.
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+  // Set a model view matrix --------------------------
+  glMatrixMode(GL_MODELVIEW);// GL_MODELVIEW: model view transformation matrix)
+  glLoadIdentity(); //Initialize a matrix
+  glViewport(0, 0, WindowWidth, WindowHeight);
+
+  // Set a viewpoint------------------------------------------------
+  if(_AutoView){
+    // Set a perspective projection matrix ------------------------------
+    glMatrixMode(GL_PROJECTION);//Matrix mode (GL PROJECTION: Perspective projection matrix)
+    glLoadIdentity();//Initialize a matrix
+    gluPerspective(30.0, (double)WindowWidth/(double)WindowHeight, 0.1, 1000.0); //Apparent volume gluPerspactive(th, w/h, near, far);
+
+    double ViewPointX = ViewPointR * cos( omega * t + ViewPointTheta);
+    double ViewPointY = ViewPointR * sin( omega * t + ViewPointTheta);
+    double ViewPointZ = InitialViewPointZ;
+    gluLookAt(
+      ViewPointX, ViewPointY, ViewPointZ, // Viewpoint: x,y,z;
+      0.0,        0.0,        0.0,        // Reference point: x,y,z
+      0.0,        0.0,        1.0 );      //Vector: x,y,z
+  }
+
+  // Rotation -------------------------
+  if(_ControlView) glMultMatrixd(rt);
+
+  //Shadow ON-----------------------------
+  glEnable(GL_LIGHTING);
+  glEnable(GL_LIGHT0);//Use a light source 0
+
+  // Objects -------------------------
+  //PopUpBall();
+  //StaticObjects();
+  CubicRobot();
+
+  // Shadow OFF -----------------------------
+  glDisable(GL_LIGHTING);
+  // -----------------------------------
+
+  // Draw ground. --------------------
+  Ground();
+  glPopMatrix();
+  // ---------------------------------
+
+  // Draw characters. -------------------------------------------------------
+  string str;
+  str = "time = " + std::to_string(t);
+  DISPLAY_TEXT(5, 95, str);
+  str = "frame = " + std::to_string(frame);
+  DISPLAY_TEXT(5, 90, str);
+  if (_Friction){str = "Friction: On";}else{str = "Friction: Off";}
+  DISPLAY_TEXT(25, 95, str);
+  if (_Damping){str = "Damping: On";}else{str = "Damping: Off";}
+  DISPLAY_TEXT(25, 90, str);
+  if (_Breathe){str = "Breathe: On";}else{str = "Breathe: Off";}
+  DISPLAY_TEXT(45, 95, str);
+  if (_Rec){str = "Rec.: On";}else{str = "Rec.: Off";}
+  DISPLAY_TEXT(45, 90, str);
+
+  // ------------------------------------------------------------------------
+
+  // Output png. -------------------------------------------------------
+  if(_Rec){
+    string fname = "./png/" + std::to_string(10000 + captured_frame) + ".png";//Output file name.
+    capture(fname);
+  }
+  // ------------------------------------------------------------------------
+
+  //glutInitDisplayMode(GLUT_DOUBLE) enables "double buffering"
+  glutSwapBuffers();
+
+  frame++ ;
+}
+
+
+//----------------------------------------------------
+// Idling function
+//----------------------------------------------------
+void Idle(){
+  //glutPostRedisplay(); //Execute glutDisplayFunc() once.
+}
+
+//----------------------------------------------------
+// Keyboard function.
+//----------------------------------------------------
+void Keyboard(unsigned char key, int x, int y){
+  switch ( key )
+  {
+  case 'a':
+    if (_AutoView){
+      _AutoView=false;
+    }else{
+      _AutoView=true;
+    }
+    break;
+
+  case 'b':
+    if (_Breathe){
+      _Breathe=false;
+    }else{
+      _Breathe=true;
+    }
+    break;
+
+  case 'd':
+    if (_Damping){
+      _Damping=false;
+    }else{
+      _Damping=true;
+    }
+    break;
+
+  case 'f':
+    if (_Friction){
+      _Friction=false;
+    }else{
+      _Friction=true;
+    }
+    break;
+
+  case 'n':
+    nudgeID += 1;
+    if (nudgeID >= N_MASS) nudgeID=-1;
+    break;
+
+  case 'r':
+    if (_Rec){
+      _Rec=false;
+    }else{
+      _Rec=true;
+    }
+    break;
+
+  case 'x':
+    fixed_view(0);
+    break;
+
+  case 'y':
+    fixed_view(1);
+    break;
+
+  case 'z':
+    fixed_view(2);
+    break;
+
+  case 'q':
+    exit(0);
+    break;
+
+  default:
+    break;
+  }
+}
+
+void SpecialKey(int key, int x, int y){
+
+  switch ( key )
+  {
+  case GLUT_KEY_LEFT:
+    nudgeForce[0] = -500.0;
+    break;
+
+  case GLUT_KEY_RIGHT:
+    nudgeForce[0] = 500.0;
+    break;
+
+  case GLUT_KEY_UP:
+    nudgeForce[1] = -500.0;
+    break;
+
+  case GLUT_KEY_DOWN:
+    nudgeForce[1] = 500.0;
+    break;
+
+  case GLUT_KEY_PAGE_DOWN:
+    nudgeForce[2] = -500.0;
+    break;
+
+  case GLUT_KEY_PAGE_UP:
+    nudgeForce[2] = 500.0;
+    break;
+
+  default:
+    break;
+  }
+}
+//----------------------------------------------------
+// Ground function
+//----------------------------------------------------
+
+void Ground(void) {
+    double ground_max_x = 500.0;
+    double ground_max_y = 500.0;
+    glColor3d(0.8, 0.8, 0.8);  // Color of the ground
+    glLineWidth(1.0d);
+
+    // Draw lines.
+    glBegin(GL_LINES);
+    // Horizontal lines.
+    for(double ly = -ground_max_y ;ly <= ground_max_y; ly+=10.0){
+      glVertex3d(-ground_max_x, ly,0);
+      glVertex3d(ground_max_x, ly,0);
+    }
+    // Vertical lines.
+    for(double lx = -ground_max_x ;lx <= ground_max_x; lx+=10.0){
+      glVertex3d(lx, ground_max_y,0);
+      glVertex3d(lx, -ground_max_y,0);
+    }
+    glEnd();
+}
+
+//----------------------------------------------------
+// Draw Cubic Robot
+//----------------------------------------------------
+
+void CubicRobot(void){
+  // Masses
+  for(int i=0; i<N_MASS; i++){
+    glPushMatrix();
+    if (i==nudgeID){
+      glMaterialfv(GL_FRONT, GL_AMBIENT, ms_jade.ambient);
+      glMaterialfv(GL_FRONT, GL_DIFFUSE, ms_jade.diffuse);
+      glMaterialfv(GL_FRONT, GL_SPECULAR, ms_jade.specular);
+      glMaterialfv(GL_FRONT, GL_SHININESS, &ms_jade.shininess);
+    }else{
+      glMaterialfv(GL_FRONT, GL_AMBIENT, ms_ruby.ambient);
+      glMaterialfv(GL_FRONT, GL_DIFFUSE, ms_ruby.diffuse);
+      glMaterialfv(GL_FRONT, GL_SPECULAR, ms_ruby.specular);
+      glMaterialfv(GL_FRONT, GL_SHININESS, &ms_ruby.shininess);
+    }
+
+    glTranslated(mass[i].p[0]*SCALE , mass[i].p[1]*SCALE , mass[i].p[2]*SCALE );
+    glutSolidSphere(nodeRadius*SCALE, 20, 20);
+    glPopMatrix();
+  }
+
+  // Springs
+  vector<double> begin_pt;
+  vector<double> end_pt;
+  glMaterialfv(GL_FRONT, GL_DIFFUSE, green);
+  glColor3d(0.0, 1.0, 0.0);//Color
+  glLineWidth(3.0d);
+  glBegin(GL_LINES);
+  for(int i=0; i<N_SPRING; i++){
+    begin_pt = mass[spring[i].masses[0]].p;
+    end_pt = mass[spring[i].masses[1]].p;
+    glVertex3d( begin_pt[0]*SCALE, begin_pt[1]*SCALE, begin_pt[2]*SCALE );
+    glVertex3d( end_pt[0]*SCALE, end_pt[1]*SCALE, end_pt[2]*SCALE );
+  }
+  glEnd();
+}
+
+//----------------------------------------------------
+// Draw Characters.
+//----------------------------------------------------
+
+void DISPLAY_TEXT(int x, int y, string str){
+  static int list=0;
+
+  glDisable(GL_LIGHTING);
+  glDisable(GL_LIGHT0);
+
+  glPushAttrib(GL_ENABLE_BIT);
+  glMatrixMode(GL_PROJECTION);
+  glPushMatrix();
+  glLoadIdentity();
+  gluOrtho2D(0, 100, 0, 100);
+  glMatrixMode(GL_MODELVIEW);
+  glPushMatrix();
+  glLoadIdentity();
+  glColor3f(0.0, 0.0, 0.0);
+  glCallList(list);
+  glPopMatrix();
+  glMatrixMode(GL_PROJECTION);
+  glPopMatrix();
+  glPopAttrib();
+  glMatrixMode(GL_MODELVIEW);
+  list=glGenLists(1);
+  glNewList(list,GL_COMPILE);
+
+  DRAW_STRING(x, y, str , GLUT_BITMAP_TIMES_ROMAN_24);
+  glEndList();
+
+glEnable(GL_LIGHTING);
+glEnable(GL_LIGHT0);
+}
+
+void DRAW_STRING(int x, int y, string str, void *font){
+  int len, i;
+  glRasterPos2f(x, y);
+  len = str.size();
+  char t_char[len];
+  str.copy(t_char, len);
+  for (i = 0; i < len; i++){
+    glutBitmapCharacter(font, t_char[i]);
+  }
+}
+
+// -----------------------------------------------------------------------
+// Frame capture -> png file
+// -----------------------------------------------------------------------
+
+void capture(const string fname)
+{
+
+    int len = fname.size();
+    char filepath[len];
+    fname.copy(filepath, len);
+
+    png_bytep raw1D;
+    png_bytepp raw2D;
+    int i;
+    int width = glutGet(GLUT_WINDOW_WIDTH);
+    int height = glutGet(GLUT_WINDOW_HEIGHT);
+
+    // Create structure.
+    FILE *fp = fopen(filepath, "wb");
+    png_structp pp = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    png_infop ip = png_create_info_struct(pp);
+
+    // Pre-process
+    png_init_io(pp, fp);
+    png_set_IHDR(pp, ip, width, height,
+        8, // 8bit
+        PNG_COLOR_TYPE_RGBA, // RGBA
+        PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
+
+    // Pixel area
+    raw1D = (png_bytep)malloc(height * png_get_rowbytes(pp, ip));
+    raw2D = (png_bytepp)malloc(height * sizeof(png_bytep));
+    for (i = 0; i < height; i++)
+        raw2D[i] = &raw1D[i*png_get_rowbytes(pp, ip)];
+
+    // Capture.
+    glReadBuffer(GL_FRONT);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1); // Initial value = 4.
+    glReadPixels(0, 0, width, height,
+            GL_RGBA, // RGBA
+            GL_UNSIGNED_BYTE, // 8bit
+            (void*)raw1D);
+
+    // Flip.
+    for (i = 0; i < height/ 2; i++){
+        png_bytep swp = raw2D[i];
+        raw2D[i] = raw2D[height - i - 1];
+        raw2D[height - i - 1] = swp;
+    }
+
+    // Write.
+    png_write_info(pp, ip);
+    png_write_image(pp, raw2D);
+    png_write_end(pp, ip);
+
+    // Close.
+    png_destroy_write_struct(&pp, &ip);
+    fclose(fp);
+    free(raw1D);
+    free(raw2D);
+
+    captured_frame += 1;
+    printf("write out screen capture to '%s'\n", filepath);
+}
+
+//------------------------------------------------------------------------
+// Viewpoint rotation by mouse drag
+//------------------------------------------------------------------------
+
+// --- Drag mouse action
+void mouse_motion(int x, int y){
+  double dx, dy, distance;
+
+  // Displacement of the mouse pointer from the drag start point.
+  dx = (x - cx) * sx;
+  dy = (y - cy) * sy;
+  distance = sqrt(dx * dx + dy * dy);
+
+  if( distance != 0.0 && mouse_button_on == 0 )
+  {
+    // Rotation by mouse drag (Quaternion dq).
+    double ar = distance * 2.0 * PI * 0.5;
+    double as = sin(ar) / distance;
+    double dq[4] = { cos(ar), dy * as, dx * as, 0.0 };
+
+    // Initial orientation cq * quarternion dq
+    qmul(tq, dq, cq);
+
+    // Quaternion -> Rotation matrix
+    qrot(rt, tq);
+  }else if( distance != 0.0 && mouse_button_on == 2  ){
+    tq[4] = cq[4] + dx * 100.0;
+    tq[6] = cq[6] - dy * 100.0;
+    rt[12] = tq[4];
+    rt[14] = tq[6];
+  }
+
+}
+
+// --- On mouse action
+void mouse_on(int button, int state, int x, int y)
+{
+  switch (button) {
+  case 0: // 	MOUSE_LEFT_BUTTON = 0,
+    switch (state) {
+    case 0:
+      // Drag starting point
+      cx = x;
+      cy = y;
+      mouse_button_on = 0;
+      break;
+    case 1:
+      // Save initial orientation.
+      cq[0] = tq[0];
+      cq[1] = tq[1];
+      cq[2] = tq[2];
+      cq[3] = tq[3];
+      mouse_button_on = -1;
+      break;
+    default:
+      break;
+    }
+    break;
+
+  //case 1: //MOUSE_MIDDLE_BUTTON = 1
+  case 2: // MOUSE_RIGHT_BUTTON = 2,
+     switch (state) {
+     case 0:
+       // Drag starting point
+       cx = x;
+       cy = y;
+       mouse_button_on = 2;
+       break;
+     case 1:
+       // Save initial orientation.
+       cq[4] = tq[4];
+       cq[5] = tq[5];
+       cq[6] = tq[6];
+       mouse_button_on = -1;
+       break;
+    default:
+      break;
+    }
+    break;
+
+  case 3: // MOUSE_SCROLL_UP = 3,
+    if (state == GLUT_DOWN){
+      rt[13] += 20;
+    }
+  case 4: // MOUSE_SCROLL_DOWN = 4
+    if (state == GLUT_DOWN){
+      rt[13] -= 10;
+    }
+
+  default:
+    break;
+  }
+  //cout << x << " " << y<<endl;
+}
+
+// --- multiplication of quaternions r <- p x q
+void qmul(double r[], const double p[], const double q[])
+{
+  r[0] = p[0] * q[0] - p[1] * q[1] - p[2] * q[2] - p[3] * q[3];
+  r[1] = p[0] * q[1] + p[1] * q[0] + p[2] * q[3] - p[3] * q[2];
+  r[2] = p[0] * q[2] - p[1] * q[3] + p[2] * q[0] + p[3] * q[1];
+  r[3] = p[0] * q[3] + p[1] * q[2] - p[2] * q[1] + p[3] * q[0];
+}
+
+// --- transform matrix r <- quaternion q
+void qrot(double r[], double q[]){
+  double x2 = q[1] * q[1] * 2.0;
+  double y2 = q[2] * q[2] * 2.0;
+  double z2 = q[3] * q[3] * 2.0;
+  double xy = q[1] * q[2] * 2.0;
+  double yz = q[2] * q[3] * 2.0;
+  double zx = q[3] * q[1] * 2.0;
+  double xw = q[1] * q[0] * 2.0;
+  double yw = q[2] * q[0] * 2.0;
+  double zw = q[3] * q[0] * 2.0;
+
+  r[ 0] = 1.0 - y2 - z2;
+  r[ 1] = xy + zw;
+  r[ 2] = zx - yw;
+  r[ 4] = xy - zw;
+  r[ 5] = 1.0 - z2 - x2;
+  r[ 6] = yz + xw;
+  r[ 8] = zx + yw;
+  r[ 9] = yz - xw;
+  r[10] = 1.0 - x2 - y2;
+  r[ 3] = r[ 7] = r[11];// = r[12] = r[13] = r[14] = 0.0;
+  r[12] = q[4];
+  r[13] = q[5];
+  r[14] = q[6];
+  r[15] = 1.0;
+}
+
+void fixed_view(int type){
+    // Set a perspective projection matrix ------------------------------
+    glMatrixMode(GL_PROJECTION);//Matrix mode (GL PROJECTION: Perspective projection matrix)
+    glLoadIdentity();//Initialize a matrix
+    gluPerspective(30.0, (double)WindowWidth/(double)WindowHeight, 0.1, 1000.0); //Apparent volume gluPerspactive(th, w/h, near, far);
+
+    double ViewPointX = 0.0;
+    double ViewPointY = 0.0;
+    double ViewPointZ = 0.0;
+
+    if (type == 0){
+        ViewPointX = -300;
+    }else if(type == 1){
+        ViewPointY = -300;
+    }else if(type == 2){
+        ViewPointZ = -300;
+    }
+
+    gluLookAt(
+      ViewPointX, ViewPointY, ViewPointZ, // Viewpoint: x,y,z;
+      0.0,        0.0,        0.0,        // Reference point: x,y,z
+      0.0,        0.0,        1.0 );      //Vector: x,y,z
+
+}
+
