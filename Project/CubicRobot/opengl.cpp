@@ -6,6 +6,7 @@
 #include <vector>
 #include <GL/glut.h>
 #include <png.h>
+#include "Vector3D.h"
 #include "opengl.h"
 #include "cube_model.h"
 
@@ -70,6 +71,7 @@ struct MaterialStruct {
   GLfloat specular[4];
   GLfloat shininess;
 };
+
 //jade
 MaterialStruct ms_jade = {
   {0.135,     0.2225,   0.1575,   1.0},
@@ -132,26 +134,32 @@ void Display(void) {
   //Clear buffer.
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-  // Set a model view matrix --------------------------
-  glMatrixMode(GL_MODELVIEW);// GL_MODELVIEW: model view transformation matrix)
-  glLoadIdentity(); //Initialize a matrix
-  glViewport(0, 0, WindowWidth, WindowHeight);
-
   // Set a viewpoint------------------------------------------------
   if(_AutoView){
+
+    vector<double> center_point(3, 0.0);
+    for (int i=0; i<N_MASS; i++)center_point = add(center_point, mass[i].p);
+    center_point = scaling(center_point, SCALE/N_MASS);
+
     // Set a perspective projection matrix ------------------------------
     glMatrixMode(GL_PROJECTION);//Matrix mode (GL PROJECTION: Perspective projection matrix)
     glLoadIdentity();//Initialize a matrix
     gluPerspective(30.0, (double)WindowWidth/(double)WindowHeight, 0.1, 1000.0); //Apparent volume gluPerspactive(th, w/h, near, far);
 
-    double ViewPointX = ViewPointR * cos( omega * t + ViewPointTheta);
-    double ViewPointY = ViewPointR * sin( omega * t + ViewPointTheta);
+    double ViewPointX = ViewPointR * cos( omega * t + ViewPointTheta) + center_point[0];
+    double ViewPointY = ViewPointR * sin( omega * t + ViewPointTheta) + center_point[1];
     double ViewPointZ = InitialViewPointZ;
     gluLookAt(
-      ViewPointX, ViewPointY, ViewPointZ, // Viewpoint: x,y,z;
-      0.0,        0.0,        0.0,        // Reference point: x,y,z
-      0.0,        0.0,        1.0 );      //Vector: x,y,z
+      ViewPointX, ViewPointY, ViewPointZ,           // Viewpoint: x,y,z;
+      center_point[0], center_point[1], center_point[2],     // Reference point: x,y,z
+      0.0,        0.0,        1.0 );                //　Vector: x,y,z
+
   }
+
+  // Set a model view matrix --------------------------
+  glMatrixMode(GL_MODELVIEW);// GL_MODELVIEW: model view transformation matrix)
+  glLoadIdentity(); //Initialize a matrix
+  glViewport(0, 0, WindowWidth, WindowHeight);
 
   // Rotation -------------------------
   if(_ControlView) glMultMatrixd(rt);
@@ -171,7 +179,9 @@ void Display(void) {
 
   // Draw ground. --------------------
   Ground();
+  glDrawAxisd(30);
   glPopMatrix();
+
   // ---------------------------------
 
   // Draw characters. -------------------------------------------------------
@@ -321,20 +331,20 @@ void SpecialKey(int key, int x, int y){
 //----------------------------------------------------
 
 void Ground(void) {
-    double ground_max_x = 500.0;
-    double ground_max_y = 500.0;
+    double ground_max_x = 1000.0;
+    double ground_max_y = 1000.0;
     glColor3d(0.8, 0.8, 0.8);  // Color of the ground
     glLineWidth(1.0d);
 
     // Draw lines.
     glBegin(GL_LINES);
     // Horizontal lines.
-    for(double ly = -ground_max_y ;ly <= ground_max_y; ly+=10.0){
+    for(double ly = -ground_max_y ;ly <= ground_max_y; ly+=20.0){
       glVertex3d(-ground_max_x, ly,0);
       glVertex3d(ground_max_x, ly,0);
     }
     // Vertical lines.
-    for(double lx = -ground_max_x ;lx <= ground_max_x; lx+=10.0){
+    for(double lx = -ground_max_x ;lx <= ground_max_x; lx+=20.0){
       glVertex3d(lx, ground_max_y,0);
       glVertex3d(lx, -ground_max_y,0);
     }
@@ -367,8 +377,26 @@ void CubicRobot(void){
   }
 
   // Springs
-  vector<double> begin_pt;
-  vector<double> end_pt;
+  GLUquadricObj *bars[N_SPRING];
+  glMaterialfv(GL_FRONT, GL_DIFFUSE, green);
+
+  for(int i=0; i<N_SPRING; i++){
+    glPushMatrix();
+    vector<double> begin_pt = mass[spring[i].masses[0]].p;
+    vector<double> end_pt = mass[spring[i].masses[1]].p;
+    begin_pt = scaling(begin_pt, SCALE);
+    end_pt = scaling(end_pt, SCALE);
+    vector<double>vec = sub(end_pt, begin_pt);
+    double vec_abs = calcNorm(vec);
+    bars[i] = gluNewQuadric();
+    gluQuadricDrawStyle(bars[i], GLU_FILL);
+    glTranslated(begin_pt[0], begin_pt[1], begin_pt[2]);
+    glRotated(acos(vec[2]/vec_abs)*180/PI, -vec[1], vec[0], 0.0);
+    gluCylinder(bars[i], 1.0, 1.0, vec_abs, 8, 8);
+    glPopMatrix();
+  }
+
+/*
   glMaterialfv(GL_FRONT, GL_DIFFUSE, green);
   glColor3d(0.0, 1.0, 0.0);//Color
   glLineWidth(3.0d);
@@ -380,6 +408,7 @@ void CubicRobot(void){
     glVertex3d( end_pt[0]*SCALE, end_pt[1]*SCALE, end_pt[2]*SCALE );
   }
   glEnd();
+*/
 }
 
 //----------------------------------------------------
@@ -626,27 +655,104 @@ void qrot(double r[], double q[]){
 }
 
 void fixed_view(int type){
+
+    // Set a model view matrix --------------------------
+    glMatrixMode(GL_MODELVIEW);// GL_MODELVIEW: model view transformation matrix)
+    glLoadIdentity(); //Initialize a matrix
+    glViewport(0, 0, WindowWidth, WindowHeight);
+
+    rt[0]=1.0; rt[1]=0.0; rt[2]=0.0; rt[3]=0.0;
+    rt[4]=0.0; rt[5]=1.0; rt[6]=0.0; rt[7]=0.0;
+    rt[8]=0.0; rt[9]=0.0; rt[10]=1.0; rt[11]=0.0;
+    rt[12]=0.0; rt[13]=0.0; rt[14]=0.0; rt[15]=1.0;
+    cq[0] = 1.0; cq[1] = 0.0; cq[2] = 0.0; cq[3] = 0.0;
+    cq[4] = 0.0; cq[5] = 0.0; cq[6] = 0.0;
+    tq[0] = 1.0; tq[1] = 0.0; tq[2] = 0.0; tq[3] = 0.0;
+    tq[4] = 0.0; tq[5] = 0.0; tq[6] = 0.0;
+
     // Set a perspective projection matrix ------------------------------
     glMatrixMode(GL_PROJECTION);//Matrix mode (GL PROJECTION: Perspective projection matrix)
     glLoadIdentity();//Initialize a matrix
     gluPerspective(30.0, (double)WindowWidth/(double)WindowHeight, 0.1, 1000.0); //Apparent volume gluPerspactive(th, w/h, near, far);
 
+    vector<double> center_point(3, 0.0);
+    for (int i=0; i<N_MASS; i++)center_point = add(center_point, mass[i].p);
+    center_point = scaling(center_point, SCALE/N_MASS);
+
     double ViewPointX = 0.0;
     double ViewPointY = 0.0;
-    double ViewPointZ = 0.0;
+    double ViewPointZ = 100.0;
 
     if (type == 0){
-        ViewPointX = -300;
+        ViewPointX = -500;
     }else if(type == 1){
-        ViewPointY = -300;
+        ViewPointY = -500;
     }else if(type == 2){
-        ViewPointZ = -300;
+        ViewPointZ = -500;
     }
 
     gluLookAt(
       ViewPointX, ViewPointY, ViewPointZ, // Viewpoint: x,y,z;
-      0.0,        0.0,        0.0,        // Reference point: x,y,z
+      center_point[0], center_point[1], center_point[2],        // Reference point: x,y,z
       0.0,        0.0,        1.0 );      //Vector: x,y,z
 
 }
 
+void glDrawAxisd(double length)
+{
+	GLUquadricObj *arrows[3];
+
+	// Draw X-axis
+	glColor3ub(255, 0, 0);
+    glLineWidth(5.0);
+	glBegin(GL_LINES);
+		glVertex3d(0, 0, 0);
+		glVertex3d( length, 0, 0);
+	glEnd();
+	glPushMatrix();
+		arrows[0] = gluNewQuadric();
+		gluQuadricDrawStyle(arrows[0], GLU_FILL);
+		glTranslated(length, 0.0f, 0.0f);
+		glRotated(90.0f, 0,1,0);
+		gluCylinder(arrows[0], length/20, 0.0f, length/5, 8, 8);
+	glPopMatrix();
+
+	// Draw Y-axis
+	glColor3ub(  0,255, 0);
+    glLineWidth(5.0);
+	glBegin(GL_LINES);
+		glVertex3d( 0, 0, 0);
+		glVertex3d( 0, length, 0);
+	glEnd();
+	glPushMatrix();
+		arrows[1] = gluNewQuadric();
+		gluQuadricDrawStyle(arrows[1], GLU_FILL);
+		glTranslated(0.0f, length, 0.0f);
+		glRotated(-90.0f, 1,0,0);
+		gluCylinder(arrows[1], length/20, 0.0f, length/5, 8, 8);
+	glPopMatrix();
+
+	// Draw Z-axis
+	glColor3ub(  0, 0,255);
+    glLineWidth(5.0);
+	glBegin(GL_LINES);
+		glVertex3d( 0, 0, 0);
+		glVertex3d( 0, 0, length);
+	glEnd();
+	glPushMatrix();
+		arrows[2] = gluNewQuadric();
+		gluQuadricDrawStyle(arrows[2], GLU_FILL);
+		glTranslated(0.0f, 0.0f, length);
+		gluCylinder(arrows[2], length/20, 0.0f, length/5, 8, 8);
+	glPopMatrix();
+
+}
+
+void getMatrix(void){
+    GLfloat m[16];
+    glGetFloatv(GL_MODELVIEW_MATRIX, m);
+    printf("m[0]:% 7.5f m[4]:% 7.5f m[8] :% 7.5f m[12]:% 7.5f\n", m[0], m[4], m[8],  m[12]);
+    printf("m[1]:% 7.5f m[5]:% 7.5f m[9] :% 7.5f m[13]:% 7.5f\n", m[1], m[5], m[9],  m[13]);
+    printf("m[2]:% 7.5f m[6]:% 7.5f m[10]:% 7.5f m[14]:% 7.5f\n", m[2], m[6], m[10], m[14]);
+    printf("m[3]:% 7.5f m[7]:% 7.5f m[11]:% 7.5f m[16]:% 7.5f\n", m[3], m[7], m[11], m[15]);
+}

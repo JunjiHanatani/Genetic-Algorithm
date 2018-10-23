@@ -23,7 +23,8 @@ void mouse_motion(int, int);
 void mouse_on(int, int, int, int);
 void CubicRobot(void);
 void fixed_view(int);
-
+void glDrawAxisd(double);
+void getMatrix(void);
 // Window Setting
 extern const int WindowPositionX;  //Window x position
 extern const int WindowPositionY;  //Window y position

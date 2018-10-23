@@ -46,6 +46,7 @@ const double contactDampingC = 1e1;
 const double FrictionCoefficient = 0.5;
 vector<bool> slip(N_MASS, true);
 
+const double allDampingC = 0.999;
 // Actuator
 const double breathe_amp = 0.03;
 const double breathe_freq = 1.0;
@@ -203,7 +204,8 @@ void PhysicsEngine(void){
     for (int j=0; j<3; j++){
       mass[i].a[j] = force[i][j]/mass[i].m;
       mass[i].v[j] += mass[i].a[j] * dt;
-      if (!slip[i]) {mass[i].v[0]=0.0; mass[i].v[1]=0.0;}
+      if (_Damping) mass[i].v[j] = allDampingC * mass[i].v[j];
+      if (!slip[i] && (j==0 || j==1)) mass[i].v[j]=0.0;
       mass[i].p[j] += mass[i].v[j] * dt;
     }
 
