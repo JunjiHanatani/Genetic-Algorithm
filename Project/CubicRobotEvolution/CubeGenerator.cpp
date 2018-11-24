@@ -31,7 +31,7 @@ vector<vector<int>> symmetric_pair;
 // Node parameter
 const double nodeRadius = 0.008;
 const double nodeMass = 0.1;
-vector<double> nodePositionOffset = {-0.05, -0.05, 0.0};
+vector<double> nodePositionOffset = {0.0, 0.0, 0.0};
 
 // Edge parameter
 double UnitLength = 0.1;
@@ -45,8 +45,8 @@ const double breathe_omega = 2.0*PI*1.0;
 
 // Cube structure.
 static const int N=3;
-int arr[N][N][N] = {{{1, 0, 0}, {0, 0, 0}, {0, 0, 0}},
-                    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+int arr[N][N][N] = {{{1, 1, 0}, {1, 1, 0}, {0, 0, 0}},
+                    {{1, 1, 0}, {1, 1, 0}, {0, 0, 0}},
                     {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}}};
 //int arr[N][N][N] = {{{1, 1, 1}, {1, 1, 1}, {1, 1, 1}},
 //                    {{1, 1, 1}, {1, 1, 1}, {1, 1, 1}},
@@ -113,11 +113,16 @@ void GenerateCube(void){
 
   N_MASS = mass.size();
 
+  vector<double> centroid = {0.0, 0.0, 0.0};
+  for(Mass m:mass) centroid = add(centroid, m.p);
+  centroid = scaling(centroid, (double)1.0/N_MASS);
+
   // Set initial mass conditions.
   for (int i=0; i<N_MASS; i++){
       mass[i].m = nodeMass;
+      mass[i].p[0] -= centroid[0];
+      mass[i].p[1] -= centroid[1];
       mass[i].p = scaling(mass[i].p, UnitLength);
-      mass[i].p = add(mass[i].p, nodePositionOffset);
       mass[i].v = {0.0, 0.0, 0.0};
       mass[i].a = {0.0, 0.0, 0.0};
   }
@@ -184,6 +189,7 @@ void InitializeCube(void){
 
 void SetBreathe(vector<vector<double>> parameter_table, string REPRESENTATION){
 
+  int num = parameter_table.size();
 
   /* DIRECT REPRESENTATION */
   if(REPRESENTATION == "direct"){
@@ -197,7 +203,7 @@ void SetBreathe(vector<vector<double>> parameter_table, string REPRESENTATION){
   }
 
   /* CUBIC REPRESENTATION */
-  if(REPRESENTATION == "cubic"){
+  else if(REPRESENTATION == "cubic"){
 
     for (int i=0; i<N_CUBE; i++){
 
@@ -222,7 +228,7 @@ void SetBreathe(vector<vector<double>> parameter_table, string REPRESENTATION){
   }
 
   /* SYMMETRIC REPRESENTATION */
-  if (REPRESENTATION =="symmetric"){
+  else if (REPRESENTATION =="symmetric"){
 
     for (int i=0; i<N_SYMMETRIC_PAIR; i++){
 
@@ -235,6 +241,53 @@ void SetBreathe(vector<vector<double>> parameter_table, string REPRESENTATION){
       breathe_offset[id2] = parameter_table[i+1][0];
       breathe_amp[id2] = parameter_table[i+1][1];
       breathe_phase[id2] = parameter_table[i+1][2] + parameter_table[0][2];
+    }
+
+  }
+
+   /* SYMMETRIC REPRESENTATION */
+  else if (REPRESENTATION =="generative"){
+
+    for (int i=0; i<N_SPRING; i++){
+
+      vector<int> sphere_list;
+      breathe_offset[i] = 0.0;
+      breathe_amp[i] = 0.0;
+      breathe_phase[i] = 0.0;
+
+      for (int j=0; j<num; j++){
+
+        double x = parameter_table[j][3];
+        double y = parameter_table[j][4];
+        double z = parameter_table[j][5];
+        double r = parameter_table[j][6];
+
+        vector<double> pt = {x, y, z};
+        vector<double> pt1 = mass[spring[i].masses[0]].p;
+        vector<double> pt2 = mass[spring[i].masses[1]].p;
+
+        if(calcDistance(pt, pt1) < r){
+          sphere_list.push_back(j);
+        }
+
+        if(calcDistance(pt, pt2) < r){
+          sphere_list.push_back(j);
+        }
+      }
+
+      int list_size = sphere_list.size();
+
+      if(list_size!=0){
+        for (int id: sphere_list){
+          breathe_offset[i] += parameter_table[id][0];
+          breathe_amp[i] += parameter_table[id][1];
+          breathe_phase[i] += parameter_table[id][2];
+        }
+        breathe_offset[i] = breathe_offset[i]/list_size;
+        breathe_amp[i] = breathe_amp[i]/list_size;
+        breathe_phase[i] = breathe_phase[i]/list_size;
+      }
+
     }
 
   }
@@ -274,10 +327,10 @@ void CubeLog(void){
   ofs_cube << "Node parameter" << endl;
   ofs_cube << "nodeRadius = " << nodeRadius << endl;
   ofs_cube << "nodeMass = " << nodeMass << endl;
-  ofs_cube << "nodePositionOffset = ("
-           << nodePositionOffset[0] << ","
-           << nodePositionOffset[1] << ","
-           << nodePositionOffset[2] << ")" << endl;
+  //ofs_cube << "nodePositionOffset = ("
+  //         << nodePositionOffset[0] << ","
+  //         << nodePositionOffset[1] << ","
+  //         << nodePositionOffset[2] << ")" << endl;
 
   ofs_cube << endl;
 

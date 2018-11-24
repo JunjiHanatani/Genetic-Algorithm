@@ -11,11 +11,11 @@ using std::string;
 using std::vector;
 
 // Time
-int frame = 0 ;
+int frame = 0;
 double t = 0.0;
 int nt = 0;
 
-double dt = 0.001;
+double dt = 0.0005;
 double dt_ms = 1;
 
 //----------------------------------------------------
@@ -57,6 +57,13 @@ int main(int argc, char *argv[]){
   // Main loop start.
   glutMainLoop();
 
+  /*
+  InitializeCube();
+  for (nt=0; nt<10000; nt++){
+    PhysicsEngine();
+    t = t + dt;
+  }
+  */
   return 0;
 }
 
@@ -68,14 +75,16 @@ void timerPhysicsEngine(int value){
   PhysicsEngine();
 
   // Call timer function after 100ms.
+
   glutTimerFunc(dt_ms, timerPhysicsEngine, 0);
 
-  if (nt%10 == 0){
+  if (nt%60 == 0){
     glutPostRedisplay();
   }
 
   t = t + dt;
   nt += 1;
 
-  if (t>100.0) exit(0);
+  //if (t>0.5) _Damping = true;
+  if (t>1.5) exit(0);
 }

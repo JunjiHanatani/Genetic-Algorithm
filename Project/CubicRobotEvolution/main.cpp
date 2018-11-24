@@ -42,6 +42,9 @@ int main(int argc, char **argv){
   //Create a folder for output files.
   mkdir("png", 0775);
   mkdir("log", 0775);
+  mkdir("log/parameter", 0775);
+  mkdir("log/trajectory", 0775);
+  mkdir("log/fitness", 0775);
 
   GenerateCube();  //initialize cube robot setting.
 
@@ -96,7 +99,7 @@ int main(int argc, char **argv){
 void DisplayCube(int argc, char **argv){
 
   InitializeCube();
-  setBestIndividual();
+  setBestIndividual(argc, argv);
 
   // GLUT initial setting
   glutInit(&argc, argv);                                    //Initialize environment.

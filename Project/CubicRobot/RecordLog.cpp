@@ -8,6 +8,7 @@ using std::endl;
 
 std::ofstream ofs_energy("./log/energy.csv");
 std::ofstream ofs_time("./log/time.csv");
+double total_time=0.0;
 
 void RecordLog(bool verbose){
   if (t==0.0){
@@ -26,6 +27,8 @@ void RecordLog(bool verbose){
              << totalEE  << ", " << totalEnergy << endl;
 
   ofs_time << elapsed_seconds.count() << endl;
-  if (verbose) cout << "Physics Engine :" << elapsed_seconds.count() << "s\n";
+  total_time += elapsed_seconds.count();
+  int num_eval = (int)nt/total_time*N_SPRING;
+  if (verbose) cout << "Physics Engine :" << elapsed_seconds.count() << "/ Average" << num_eval << "\n";
 }
 

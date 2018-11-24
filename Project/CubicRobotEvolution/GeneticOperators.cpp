@@ -9,7 +9,6 @@
 #include "GeneticOperators.h"
 #include "Vector3D.h"
 #include "CubeGenerator.h"
-#include "RecordLog.h"
 #include "PhysicsEngine.h"
 
 using std::vector;
@@ -18,28 +17,35 @@ using std::endl;
 using std::string;
 
 int gen = 0;
-int N_GEN = 10;
-static const int N_POP = 10;
+int N_GEN = 500;
+static const int N_POP = 30;
 static const int FREQ_OUT = 1;
-static const string REPRESENTATION="symmetric";
 
+string REPRESENTATION;
+int SIZE_OF_CHROMOSOME;
+int SIZE_OF_GENE;
+
+static const int N_AREA = 10;
 static const int N_ELITES = 1;
 static const int N_TOURNAMENT = 3;
-static const int N_LAYERS = 5;
+static const int N_LAYERS = 6;
 static const double P_MUT = 0.7;
 static const double RATE_OVERAGE = 0.2;
-int MAX_AGE[N_LAYERS] = {3, 6, 12, 24, 48};
+int MAX_AGE[N_LAYERS] = {5, 10, 20, 40, 80};
 static double const T_MAX = 9.0;
 static double const T_MIN = 2.0;
 double offset_range[2] = {-0.03, 0.03};
 double amp_range[2] = {0.0, 0.05};
 double phase_range[2] = {-PI, PI};
-static const double thresh = 0.001;
-static const double alpha = 2;
+double center_range[2] = {-0.12, 0.12};
+double center_range_z[2] = {-0.2, 0.22};
+double radius_range[2] = {0.0, 0.175};
+static const double thresh = 0.005;
+static const double alpha = 1;
 
 double duration[5];
+Timer tm_global;
 static std::ofstream ofs_log;
-int SIZE_OF_CHROMOSOME;
 static int const NT_MAX = (int) (T_MAX + 1.0)/dt;          // = 20000;
 static int const NT_MIN = (int) (T_MIN + 1.0)/dt;          // = 6000;
 static int const NT_CYCLE = (int)2.0*PI/breathe_omega/dt;  // = 2000
@@ -58,13 +64,25 @@ vector<Individual> createInitialPop(int num){
     for (int i=0; i<num; i++){
       Individual ind;
       for (int j=0; j<SIZE_OF_CHROMOSOME; j++){
-        double offset = get_rand_range_dbl(offset_range[0], offset_range[1]);
-        double amp = get_rand_range_dbl(amp_range[0], amp_range[1]);
-        double phase = get_rand_range_dbl(phase_range[0], phase_range[1]);
-        ind.para.push_back({offset, amp, phase});
+
+          double offset = get_rand_range_dbl(offset_range[0], offset_range[1]);
+          double amp = get_rand_range_dbl(amp_range[0], amp_range[1]);
+          double phase = get_rand_range_dbl(phase_range[0], phase_range[1]);
+
+        if(REPRESENTATION=="generative"){
+          double x = get_rand_range_dbl(center_range[0], center_range[1]);
+          double y = get_rand_range_dbl(center_range[0], center_range[1]);
+          double z = get_rand_range_dbl(center_range_z[0], center_range_z[1]);
+          double r = get_rand_range_dbl(radius_range[0], radius_range[1]);
+          ind.para.push_back({offset, amp, phase, x, y, z, r});
+        }else{
+          ind.para.push_back({offset, amp, phase});
+        }
+
       }
       pop[i] = ind;
     }
+
     return pop;
 }
 
@@ -129,22 +147,59 @@ void evaluateMPI(vector<Individual>&pop){
   double global_err[N_POP*3];
   double local_trajectory[N_POP*3*3*SIZE_TRAJECTORY];
   double global_trajectory[N_POP*3*3*SIZE_TRAJECTORY];
+  double local_parameter[N_POP*SIZE_OF_CHROMOSOME*7];
+  double global_parameter[N_POP*SIZE_OF_CHROMOSOME*7];
+  int num;
+  int num_mpi;
 
-  int num = pop.size();
-  int num_mpi = std::ceil((double)num/(double)size);
+  /* --- Scatter parameter data in process 0 to others --- */
 
+  if (rank==0){
+    num = pop.size();
+    num_mpi = std::ceil((double)num/(double)size);
+    int cnt = 0;
+    for (int i=0; i<num; i++){
+      for (int j=0; j<SIZE_OF_CHROMOSOME; j++){
+        for (int k=0; k<SIZE_OF_GENE; k++){
+          global_parameter[cnt] = pop[i].para[j][k];
+          cnt += 1;
+        }
+      }
+    }
+  }
+
+  MPI_Barrier(MPI_COMM_WORLD);
+  MPI_Bcast(&num, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  MPI_Bcast(&num_mpi, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  MPI_Scatter(&global_parameter, num_mpi*SIZE_OF_CHROMOSOME*SIZE_OF_GENE, MPI_DOUBLE,
+              &local_parameter,  num_mpi*SIZE_OF_CHROMOSOME*SIZE_OF_GENE, MPI_DOUBLE,
+              0, MPI_COMM_WORLD);
+
+
+  /* --- Start parallel computing --- */
   for(int iter=0; iter<num_mpi; iter++){
 
     int i = rank*num_mpi + iter;
 
     if (i < num){
 
+      /* --- Initialize the cube parameter --- */
       InitializeCube();
 
-      // Set breathe parameter.
-      SetBreathe(pop[i].para, REPRESENTATION);
+      /* --- Set breathe parameter. --- */
+      vector<vector<double>> para_vec;
+      for (int j=0; j<SIZE_OF_CHROMOSOME; j++){
+        vector<double> gene;
+        for (int k=0; k<SIZE_OF_GENE; k++){
+          int id = SIZE_OF_GENE*SIZE_OF_CHROMOSOME*iter+j*SIZE_OF_GENE+k;
+          gene.push_back(local_parameter[id]);
+        }
+        para_vec.push_back(gene);
+      }
 
-      // Begin Physics Simulation.
+      SetBreathe(para_vec, REPRESENTATION);
+
+      /* --- Begin physics simulation. --- */
       vector<vector<double>> center_list;
       for (nt=0; nt<=NT_MAX; nt++){
         PhysicsEngine();
@@ -159,29 +214,11 @@ void evaluateMPI(vector<Individual>&pop){
         t += dt;
       }
 
-      //local_distance[iter] = calcDistance(center_list[0], center_list.back());
-      local_distance[iter] = fabs(center_list[0][0] - center_list.back()[0]);
-
-      /* --- Calc. Error --- */
-      vector<double> z_list;
-      for (int j=AVE_RANGE_MIN; j<SIZE_TRAJECTORY; j++){
-        z_list.push_back(center_list[j][2]);
-      }
-      double ave = std::accumulate(z_list.begin(), z_list.end(), 0.0) / z_list.size();
-      double err=0.0;
-      for(double z:z_list) err += (z - ave) * (z - ave);
-      local_err[iter] = sqrt(err);
-
-      /* --- Calc. Factor --- */
-      double factor;
-      if (thresh > local_err[iter]){
-          factor = 1.0;
-      }else{
-          factor = std::pow(thresh/local_err[iter], alpha);
-      }
-
-      /* --- Fitness --- */
-      local_fitness[iter] = local_distance[iter] * factor;
+      /* --- Calculate Fitness --- */
+      vector<double> results = calcFitness(center_list);
+      local_distance[iter] = results[0];
+      local_err[iter] = results[1];
+      local_fitness[iter] = results[2];
 
       /* --- Trajectory --- */
       for (int j=0; j<SIZE_TRAJECTORY; j++){
@@ -193,29 +230,85 @@ void evaluateMPI(vector<Individual>&pop){
     }
   }
 
-  MPI_Allgather( &local_err, num_mpi, MPI_DOUBLE, &global_err, num_mpi, MPI_DOUBLE, MPI_COMM_WORLD );
-  MPI_Allgather( &local_distance, num_mpi, MPI_DOUBLE, &global_distance, num_mpi, MPI_DOUBLE, MPI_COMM_WORLD );
-  MPI_Allgather( &local_fitness, num_mpi, MPI_DOUBLE, &global_fitness, num_mpi, MPI_DOUBLE, MPI_COMM_WORLD );
-  MPI_Allgather( &local_trajectory, num_mpi*SIZE_TRAJECTORY*3, MPI_DOUBLE,
-                 &global_trajectory, num_mpi*SIZE_TRAJECTORY*3, MPI_DOUBLE, MPI_COMM_WORLD );
+  MPI_Barrier(MPI_COMM_WORLD);
+  MPI_Gather( &local_err, num_mpi, MPI_DOUBLE, &global_err, num_mpi, MPI_DOUBLE, 0, MPI_COMM_WORLD );
+  MPI_Gather( &local_distance, num_mpi, MPI_DOUBLE, &global_distance, num_mpi, MPI_DOUBLE, 0, MPI_COMM_WORLD );
+  MPI_Gather( &local_fitness, num_mpi, MPI_DOUBLE, &global_fitness, num_mpi, MPI_DOUBLE, 0, MPI_COMM_WORLD );
+  MPI_Gather( &local_trajectory, num_mpi*SIZE_TRAJECTORY*3, MPI_DOUBLE,
+                 &global_trajectory, num_mpi*SIZE_TRAJECTORY*3, MPI_DOUBLE, 0, MPI_COMM_WORLD );
 
-  for (int i=0; i<num; i++){
-    pop[i].fitness = global_fitness[i];
-    pop[i].distance = global_distance[i];
-    pop[i].err = global_err[i];
-  }
-
-  for (int i=0; i<num; i++){
-    vector<vector<double>> trajectory;
-    for (int j=0; j<SIZE_TRAJECTORY; j++){
-      double x = global_trajectory[i*SIZE_TRAJECTORY*3 + j*3 + 0];
-      double y = global_trajectory[i*SIZE_TRAJECTORY*3 + j*3 + 1];
-      double z = global_trajectory[i*SIZE_TRAJECTORY*3 + j*3 + 2];
-      trajectory.push_back({x, y, z});
+  if(rank==0){
+    for (int i=0; i<num; i++){
+      pop[i].fitness = global_fitness[i];
+      pop[i].distance = global_distance[i];
+      pop[i].err = global_err[i];
     }
-    pop[i].trajectory = trajectory;
+
+    for (int i=0; i<num; i++){
+      vector<vector<double>> trajectory;
+      for (int j=0; j<SIZE_TRAJECTORY; j++){
+        double x = global_trajectory[i*SIZE_TRAJECTORY*3 + j*3 + 0];
+        double y = global_trajectory[i*SIZE_TRAJECTORY*3 + j*3 + 1];
+        double z = global_trajectory[i*SIZE_TRAJECTORY*3 + j*3 + 2];
+        trajectory.push_back({x, y, z});
+      }
+      pop[i].trajectory = trajectory;
+    }
   }
+
+  ofs_log << "Done." << endl;
 }
+
+vector<double> calcFitness(vector<vector<double>> &center_list){
+
+  double distance, err, factor, fitness;
+  vector<double> results;
+
+  /* --- Calc. travel length --- */
+  //local_distance[iter] = calcDistance(center_list[0], center_list.back());
+  distance = center_list.back()[0] - center_list[0][0];
+
+  /* --- Calc. error --- */
+
+  vector<double> z_list, y_list;
+  for (int j=AVE_RANGE_MIN; j<SIZE_TRAJECTORY; j++){
+    y_list.push_back(center_list[j][1]);
+    z_list.push_back(center_list[j][2]);
+  }
+
+  int size_of_list = y_list.size();
+  double ave = std::accumulate(z_list.begin(), z_list.end(), 0.0) / size_of_list;
+  err = 0.0;
+  for(int k=0; k<size_of_list; k++){
+    err += fabs(z_list[k] - ave);
+    err += sqrt(pow ((z_list[k] - ave), 2) + pow (y_list[k]* 0.2, 2));
+  }
+  err = err/size_of_list;
+
+  /*
+  vector<double> y_abs_list;
+  for (int j=AVE_RANGE_MIN; j<SIZE_TRAJECTORY; j++){
+    y_abs_list.push_back(fabs(center_list[j][1]));
+  }
+  err = *std::max_element(y_abs_list.begin(), y_abs_list.end());
+  */
+
+  /* --- Calc. penalty factor --- */
+
+  if (thresh > err){
+      factor = 1.0;
+  }else{
+      factor = std::pow(thresh/err, alpha);
+  }
+
+  /* --- Fitness --- */
+  fitness = distance * factor;
+
+  results = {distance, err, fitness};
+
+  return results;
+}
+
 
 // -----------------------------------------------
 //  SORT
@@ -233,7 +326,6 @@ void sort_pop(vector<Individual> &pop){
 // -----------------------------------------------
 // SELECTION
 // -----------------------------------------------
-
 
 vector<Individual> tournamentSelection(vector<Individual> const &pop, int n_offspring, int n_tournament){
 
@@ -288,8 +380,11 @@ vector<Individual> rouletteSelection(vector<Individual> &pop, int n_offspring){
 }
 
 vector<Individual> elitistSelection(vector<Individual> const &pop, int n_elites){
-    vector<Individual> elites(n_elites);
-    for (int i=0; i<N_ELITES; i++) elites[i] = pop[i];
+    vector<Individual> elites;
+    int num = pop.size();
+    if (N_ELITES <= num){
+      for (int i=0; i<N_ELITES; i++) elites.push_back(pop[i]);
+    }
     return elites;
 }
 
@@ -312,10 +407,12 @@ void agelayeredSelection(vector<Individual>pops[]){
 
     for (int id=0; id<N_LAYERS; id++){
 
+        /* --- Overages --- */
         if (id != N_LAYERS-1){
             overages[id+1] = overageSelection(pops[id], id);
         }
 
+        /* --- Selection --- */
         int M = N_POP*(1.0 - RATE_OVERAGE);
         int N = N_POP*RATE_OVERAGE;
         int m = pops[id].size();
@@ -358,19 +455,10 @@ void agelayeredSelection(vector<Individual>pops[]){
             pops[id].insert(pops[id].end(), overages[id].begin(), overages[id].end());
         }
 
-        vector<double> age_list;
-        int min_age; int max_age;
-        if (id==0){min_age = 1;}else{min_age = MAX_AGE[id-1]+1;}
-        max_age = MAX_AGE[id];
-        for (Individual ind:pops[id]) age_list.push_back(ind.age);
-        ofs_log << "    LAYER" << id << "|";
-        for (int age=min_age; age<=max_age; age++){
-            size_t n_count = std::count(age_list.begin(), age_list.end(), age);
-            if (n_count!=0) ofs_log << " AGE " << age << "(" << n_count << ")";
-        }
-        ofs_log << endl;
     }
+
 }
+
 
 // -----------------------------------------------
 // MUTATION
@@ -383,23 +471,32 @@ void mutation(vector<Individual> &pop){
         if (get_rand_range_dbl(0.0, 1.0) < P_MUT){
             mutNormal(pop[i]);
             cnt += 1;
+        }else if(get_rand_range_dbl(0.0, 1.0) < P_MUT){
+          if (REPRESENTATION=="generative"){
+            mutSphere(pop[i]);
+            cnt += 1;
+          }
         }
     }
     ofs_log << "Done. (" << cnt << "/" << num << ")" << endl;
 }
 
 void mutNormal(Individual &ind){
-    std::normal_distribution<> normal_dist_a(0.0, 0.01);
-    std::normal_distribution<> normal_dist_b(0.0, 0.01);
-    std::normal_distribution<> normal_dist_c(0.0, 0.1);
+    std::normal_distribution<> normal_dist_1(0.0, 0.01);
+    std::normal_distribution<> normal_dist_5(0.0, 0.05);
     int i = get_rand_range_int(0, SIZE_OF_CHROMOSOME-1);
-    //for (int i=0; i<SIZE_OF_CHROMOSOME; i++){
-      //if (get_rand_range_dbl(0.0, 1.0) < 0.3){
-        ind.para[i][0] += normal_dist_a(mt_engine);
-        ind.para[i][1] += normal_dist_b(mt_engine);
-        ind.para[i][2] += normal_dist_c(mt_engine);
-      //}
-    //}
+    ind.para[i][0] += normal_dist_1(mt_engine);
+    ind.para[i][1] += normal_dist_1(mt_engine);
+    ind.para[i][2] += normal_dist_5(mt_engine);
+}
+
+void mutSphere(Individual &ind){
+    std::normal_distribution<> normal_dist(0.0, 0.03);
+    int i = get_rand_range_int(0, SIZE_OF_CHROMOSOME-1);
+    ind.para[i][3] += normal_dist(mt_engine);
+    ind.para[i][4] += normal_dist(mt_engine);
+    ind.para[i][5] += normal_dist(mt_engine);
+    ind.para[i][6] += normal_dist(mt_engine);
 }
 
 // -----------------------------------------------
@@ -452,6 +549,29 @@ vector<Individual> oneptcx(Individual &ind1, const Individual &ind2){
     return children;
 }
 
+vector<Individual> oneptswap(Individual &ind1, const Individual &ind2){
+
+    int swap_pt1 = get_rand_range_int(0, SIZE_OF_CHROMOSOME-1);
+    int swap_pt2 = get_rand_range_int(0, SIZE_OF_CHROMOSOME-1);
+    vector<Individual> children;
+
+    // Swap.
+    vector<vector<double>> para1 = ind1.para;
+    vector<vector<double>> para2 = ind2.para;
+    vector<vector<double>> child_para1 = para1;
+    vector<vector<double>> child_para2 = para2;
+
+    child_para1[swap_pt1] = para2[swap_pt2];
+    child_para2[swap_pt2] = para1[swap_pt1];
+    int age = std::max(ind1.age, ind2.age);
+
+    // New individuals.
+    Individual child1; child1.para=child_para1; child1.age=age;
+    Individual child2; child2.para=child_para2; child2.age=age;
+    children = {child1, child2};
+
+    return children;
+}
 
 void alpsGA(vector<Individual>pops[]){
     int rank;
@@ -461,9 +581,12 @@ void alpsGA(vector<Individual>pops[]){
     ofs_log << " ----- GENERATION: " << gen << " ----- " <<endl;
 
     for (int id=N_LAYERS-1; id>=0; id--){
+
         ofs_log << "  LAYER: " << id << endl;
 
-        if(pops[id].size()==0){
+        int num = pops[id].size();
+        MPI_Bcast(&num, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        if(num==0){
             ofs_log << "    No Population: " << endl;
             continue;
         }
@@ -502,10 +625,9 @@ void alpsGA(vector<Individual>pops[]){
         evaluateMPI(offspring);
         offspring.insert(offspring.end(), elites.begin(), elites.end());
         sort_pop(offspring);
-        ofs_log << "best fitness=" << std::setprecision(6) << offspring[0].fitness << endl;
-
         for(Individual &ind:offspring) ind.age += 1;
         pops[id] = offspring;
+
         duration[2] += tm.elapsed();
 
     }
@@ -513,6 +635,7 @@ void alpsGA(vector<Individual>pops[]){
     // --------------------------------------
     // Selection
     // --------------------------------------
+
     tm.restart();
     ofs_log << "  SELECTION" << endl;
 
@@ -520,73 +643,98 @@ void alpsGA(vector<Individual>pops[]){
     agelayeredSelection(pops);
 
     // --- Create new population
-    if (pops[0].size()==0){
-        pops[0] = createInitialPop(N_POP);
-        evaluateMPI(pops[0]);
-        ofs_log << "    New population created. " << endl;
+    int num = pops[0].size();
+    MPI_Bcast(&num, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    if (num==0){
+      if(rank==0) pops[0] = createInitialPop(N_POP);
+      ofs_log << "    New population created. Evaluation ";
+      evaluateMPI(pops[0]);
     }
 
     // --- Sort.
     for (int i=0; i<N_LAYERS; i++) sort_pop(pops[i]);
+
+    /* --- Output next generations --- */
+    for (int id=0; id<N_LAYERS; id++){
+      ofs_log << "    LAYER" << id << "|";
+      vector<double> age_list;
+      for (Individual ind:pops[id]) age_list.push_back(ind.age);
+      for (int age=1; age<=gen+1; age++){
+          size_t n_count = std::count(age_list.begin(), age_list.end(), age);
+          if (n_count!=0) ofs_log << " AGE " << age << "(" << n_count << ") ";
+      }
+      if(pops[id].size()!=0) ofs_log << "Best fitness=" << pops[id][0].fitness;
+      ofs_log << endl;
+    }
 
     duration[3] += tm.elapsed();
 
     // ---------------------------------------
     // Output
     // ---------------------------------------
-    if (rank==0){
-      tm.restart();
-      ofs_log << "  OUTPUT" << endl;
-      RecordLog(pops);
-      duration[4] += tm.elapsed(); tm.restart();
-    }
-    ofs_log << "END" << endl; ofs_log << endl;
+
+    tm.restart();
+    ofs_log << "  OUTPUT";
+    if (rank==0) RecordLog(pops);
+    duration[4] += tm.elapsed(); tm.restart();
 
 }
 
 // ---------------------------------------------------
 // Genetic Algorithm
 // ---------------------------------------------------
-void EvolveCube(void)
-{
-    Timer tm;
+void EvolveCube(void){
+
     int rank;
     MPI_Comm_rank( MPI_COMM_WORLD, &rank );
+
+    if(rank==0){
+      ofs_log.open("./log/log.csv");
+      ofs_log << " < START EVOLUTION >" <<endl;
+    }
+
+    /* ----------- Set Representation. ------------*/
+    char rep;
+    if (rank==0){
+      cout << endl << "Please select the representation mode" << endl;
+      cout << "(d) direct / (c) cubic / (s) symmetric / (g) generative" << endl;
+      std::cin >> rep;
+      cout << endl;
+    }
+    MPI_Bcast(&rep, 1, MPI_CHAR, 0, MPI_COMM_WORLD);
+    setRepresentation(rep);
+    ofs_log << "  Representation: " << REPRESENTATION << endl <<endl;
+
+    /* -------- Create initial population. --------*/
+
+    ofs_log << " ----- INITIAL POPULATION ----- " << endl;
     vector<Individual> pops[N_LAYERS];
+    if(rank==0) pops[0] = createInitialPop(N_POP);
 
-    if (REPRESENTATION=="direct"){
-      SIZE_OF_CHROMOSOME = N_SPRING;
-    }else if(REPRESENTATION=="cubic"){
-      SIZE_OF_CHROMOSOME = N_CUBE;
-    }else if(REPRESENTATION=="symmetric"){
-      SIZE_OF_CHROMOSOME = N_SYMMETRIC_PAIR + 1;
-    }
 
-    // Create initial populations.
-    if (rank==0) {
-        ofs_log.open("./log/log.csv");
-        ofs_log << " < START EVOLUTION >" <<endl;
-        ofs_log <<endl;
-        ofs_log << " ----- INITIAL POPULATION ----- " <<endl;
-    }
-    pops[0] = createInitialPop(N_POP);
-
-    // Evaluation
+    /* ----------------- Evaluation. ------------- */
+    ofs_log << "  EVALUATION ";
     evaluateMPI(pops[0]);
     sort_pop(pops[0]);
 
-    // Log
+    /* ----------------- Output ------------------ */
+    ofs_log << "  OUTPUT";
     if (rank==0){
-      ofs_log << "  OUTPUT" << endl;
+      cout << "REPRESENTATION: " << REPRESENTATION << endl;
+      cout << "N_POP = " << N_POP << endl;
+      cout << "N_LAYERS = " << N_LAYERS << endl;
+      cout << "N_GEN = " << N_GEN << endl;
+      cout << "SIZE_OF_CHROMOSOME = " << SIZE_OF_CHROMOSOME << endl;
+      cout << "SIZE_OF_GENE = " << SIZE_OF_GENE << endl << endl;
       RecordLog(pops);
-      ofs_log << "END" << endl; ofs_log << endl;
     }
 
-    // Start evolution.
+    /* ----------------- Evolution ----------------*/
     for (gen=1; gen<=N_GEN; gen++){
         alpsGA(pops);
     }
 
+    /* ----------------- Output ------------------ */
     if (rank==0){
       cout << endl;
       cout << " --- Average elapsed time --- " << endl;
@@ -600,66 +748,56 @@ void EvolveCube(void)
 
 }
 
-void Restart(void)
-{
+void Restart(void){
+
     int rank;
     MPI_Comm_rank( MPI_COMM_WORLD, &rank );
-    Timer tm;
     vector<Individual> pops[N_LAYERS];
 
-    // Read restart data.
-    vector<vector<double>>df;
-    string filename = "./log/restart.csv";
-
-    df = read_csv(filename, 7, -1);
-    for (vector<double> data: df){
-      int layer = data[0];
-      int ID = data[1];
-      int locus = data[2];
-
-      if (locus==0) {
-        Individual ind;
-        ind.age = data[7];
-        ind.fitness = data[8];
-        pops[layer].push_back(ind);
-      }
-
-      vector<double> parameter ={data[3], data[4], data[5], data[6]};
-      pops[layer][ID].para.push_back(parameter);
+    if(rank==0){
+      ofs_log.open("./log/log.csv", std::ios::app);
+      ofs_log << " < RESTART >" << endl;
     }
 
-    // Evaluation
+    /* Read restart data */
+    string filename = "./log/restart.csv";
+    int ini_gen = readRestartData(pops, filename);
+
+    /* Evaluation */
     for (int i=0; i<N_LAYERS; i++){
+      ofs_log << "  Evaluation (Layer" + std::to_string(i) + ")";
       evaluateMPI(pops[i]);
       sort_pop(pops[i]);
     }
 
-    df = read_csv(filename, 5, 5);
-    int INI_GEN = (int)df[0][0];
-
-    df = read_csv(filename, 1, 1);
-    SIZE_OF_CHROMOSOME = df[0][6];
-
     // Log
     if (rank==0) {
-      ofs_log.open("./log/log.csv", std::ios::app);
-      ofs_log << " < RESTART >" << endl;
-      ofs_log << "  N_POP: "    << df[0][0]    << "  |"
-              << "  N_LAYERS: " << df[0][3] << "  |"
-              << "  SIZE_OF_CHROMOSOME: " << df[0][6] << endl;
       for (int i=0; i<N_LAYERS; i++){
         ofs_log << "  LAYER" << i << "| ";
-        ofs_log << "best fitness=" << std::setprecision(6) << pops[i][0].fitness << endl;
+        if(pops[i].size()==0){
+          ofs_log << "No Population: " << endl;
+        }else{
+          ofs_log << "best fitness=" << std::setprecision(6) << pops[i][0].fitness << endl;
+        }
       }
       ofs_log << endl;
     }
 
-    // Start evolution.
-    for (gen=INI_GEN+1; gen<=N_GEN; gen++){
+    if (rank==0){
+      cout << "REPRESENTATION: " << REPRESENTATION << endl;
+      cout << "N_POP = " << N_POP << endl;
+      cout << "N_LAYERS = " << N_LAYERS << endl;
+      cout << "N_GEN = " << N_GEN << endl;
+      cout << "SIZE_OF_CHROMOSOME = " << SIZE_OF_CHROMOSOME << endl;
+      cout << "SIZE_OF_GENE = " << SIZE_OF_GENE << endl << endl;
+    }
+
+    /* Start evolution. */
+    for (gen=ini_gen+1; gen<=N_GEN; gen++){
         alpsGA(pops);
     }
 
-    // Log.
+    /* Log. */
     if (rank==0){
       cout << endl;
       cout << " --- Average elapsed time --- " << endl;
@@ -674,30 +812,34 @@ void Restart(void)
 }
 
 void RecordLog(vector<Individual>pops[]){
+    int num; /* Size of population */
 
+    /* --- Merge all layers --- */
     vector<Individual> totalPOP;
     for (int i=0; i<N_LAYERS; i++){
         totalPOP.insert(totalPOP.end(), pops[i].begin(), pops[i].end());
     }
+    num = totalPOP.size();
     sort_pop(totalPOP);
 
-    // Size of the population.
-    int num = totalPOP.size();
-
     // Output
-    if (gen%FREQ_OUT==0){
+    if (gen%FREQ_OUT==0 || gen==N_GEN){
 
         // Output File
-        std::ofstream ofs_para("./log/para_" + std::to_string(gen) + ".csv");
-        std::ofstream ofs_fitness("./log/fitness_" + std::to_string(gen) + ".csv");
-        std::ofstream ofs_trajectory("./log/trajectory_" + std::to_string(gen) + ".csv");
+        std::ofstream ofs_para("./log/parameter/para_" + std::to_string(gen) + ".csv");
+        std::ofstream ofs_fitness("./log/fitness/fitness_" + std::to_string(gen) + ".csv");
+        std::ofstream ofs_trajectory("./log/trajectory/trajectory_" + std::to_string(gen) + ".csv");
 
         // Parameter
-        ofs_para << std::setprecision(8)
-                 << "offset" << "," << "amplitude" << "," << "phase" << endl;
+        ofs_para << REPRESENTATION << endl;
+        ofs_para << "offset" << "," << "amplitude" << "," << "phase" << endl;
+        ofs_para << std::setprecision(16);
         for (int i=0; i<num; i++){
-            for (vector<double> vec: totalPOP[i].para){
-                ofs_para << vec[0] << "," << vec[1] << "," << vec[2] << endl;
+            for (int j=0; j<SIZE_OF_CHROMOSOME; j++){
+                for (int k=0; k<SIZE_OF_GENE; k++){
+                    ofs_para << totalPOP[i].para[j][k] << ",";
+                }
+                ofs_para << endl;
             }
         }
 
@@ -729,30 +871,28 @@ void RecordLog(vector<Individual>pops[]){
     static std::ofstream ofs_best;
     if (gen==0){
       ofs_best.open("./log/best_fitness.csv");
+      ofs_best << "generation"<<",";
+      for (int i=0;i<N_LAYERS;i++) ofs_best << "LAYER" + std::to_string(i) <<",";
+      ofs_best << endl;
+
     }else{
       ofs_best.open("./log/best_fitness.csv", std::ios::app);
+      ofs_best << gen << ",";
+      for (int i=0; i<N_LAYERS; i++){
+          if (pops[i].size()!=0){
+              ofs_best << pops[i][0].fitness << ",";
+          }else{
+              ofs_best << ",";
+          }
+      }
+      ofs_best << endl;
     }
-
-    if (gen==0){
-        ofs_best << "generation"<<",";
-        for (int i=0;i<N_LAYERS;i++) ofs_best << "LAYER" + std::to_string(i) <<",";
-        ofs_best << endl;
-    }
-
-    ofs_best << gen << ",";
-    for (int i=0; i<N_LAYERS; i++){
-        if (pops[i].size()!=0){
-            ofs_best << pops[i][0].fitness << ",";
-        }else{
-            ofs_best << ",";
-        }
-    }
-    ofs_best << endl;
     ofs_best.close();
 
     /* --- Restart --- */
     std::ofstream ofs_restart("./log/restart.csv");
 
+    ofs_restart << REPRESENTATION << endl;
     ofs_restart << "N_POP" << "," << "N_ELITES" << "," << "N_TOURNAMENT" << ","
                 << "N_LAYERS" << "," << "P_MUT" << "," << "RATE_OVERAGE" << ","
                 << "SIZE_OF_CHROMOSOME" << endl;
@@ -767,9 +907,8 @@ void RecordLog(vector<Individual>pops[]){
     ofs_restart << "Generation" << endl;
     ofs_restart << gen << endl;
 
-    ofs_restart << "LAYER" << "," << "indID" << "," << "springID" << ","
-                << "offset" << "," << "amp" << "," << "phase1" << ","
-                << "age" <<  endl;
+    ofs_restart << "LAYER" << "," << "indID" << "," << "springID" << "," << "age" << ","
+                << "offset" << "," << "amp" << "," << "phase" <<  endl;
 
     for (int i=0; i<N_LAYERS; i++){
       int indID = 0;
@@ -777,27 +916,41 @@ void RecordLog(vector<Individual>pops[]){
         int springID=0;
         for(vector<double> vec: ind.para){
           ofs_restart << std::setprecision(16)
-                      << i << "," << indID << "," << springID << ","
-                      << vec[0] << "," << vec[1] << "," << vec[2] << ","
-                      << ind.age << endl;
+                      << i << "," << indID << "," << springID << "," << ind.age;
+          for (double x: vec){
+            ofs_restart << "," << x;
+          }
+          ofs_restart << endl;
           springID+=1;
         }
         indID+=1;
       }
     }
 
-    cout << "Generation: " << std::setw(3) << std::right << gen
-    << "  Fitness: " << std::fixed << std::setprecision(6) << totalPOP[0].fitness
-    << "  Distance: " << totalPOP[0].distance
-    << "  Err: " << totalPOP[0].err
-    << endl;
+    cout << "Generation: " << std::setw(3) << std::right << gen << "  |"
+         << "  Fitness: " << std::fixed << std::setprecision(6) << totalPOP[0].fitness
+         << "  Distance: " << totalPOP[0].distance
+         << "  Err: " << totalPOP[0].err << "  |"
+         << "  Time: " << std::setw(6) << std::setprecision(3) << std::right << tm_global.elapsed() << " sec"
+         << endl;
+    tm_global.restart();
 
+    ofs_log << "        Done." << endl << endl;
 }
 
-void setBestIndividual(void){
+void setBestIndividual(int argc, char **argv){
   Individual ind;
   int i = 0;
-  int n = N_GEN;
+
+  string filename;
+  if (argc <= 2){
+    filename = "./log/parameter/para_" + std::to_string(N_GEN) + ".csv";
+  }else{
+    filename = argv[2];
+  }
+
+  vector<vector<string>> strvec = read_csv_string(filename, 0, 0);
+  REPRESENTATION = strvec[0][0];
 
   if (REPRESENTATION=="direct"){
     SIZE_OF_CHROMOSOME = N_SPRING;
@@ -805,12 +958,79 @@ void setBestIndividual(void){
     SIZE_OF_CHROMOSOME = N_CUBE;
   }else if(REPRESENTATION=="symmetric"){
     SIZE_OF_CHROMOSOME = N_SYMMETRIC_PAIR + 1;
+  }else if (REPRESENTATION=="generative"){
+    SIZE_OF_CHROMOSOME = N_AREA;
   }
 
-  int INI = 1 + SIZE_OF_CHROMOSOME * i;
+  int INI = 2 + SIZE_OF_CHROMOSOME * i;
   int FIN = INI + SIZE_OF_CHROMOSOME - 1;
-  string filename = "./log/para_" + std::to_string(n) + ".csv";
+
   vector<vector<double>> parameter_table = read_csv(filename, INI, FIN);
   SetBreathe(parameter_table, REPRESENTATION);
 
+}
+
+void setRepresentation(char rep){
+
+  if ( rep=='d'){
+    REPRESENTATION="direct";
+    SIZE_OF_CHROMOSOME = N_SPRING;
+    SIZE_OF_GENE = 3;
+
+  }else if(rep=='c'){
+    REPRESENTATION="cubic";
+    SIZE_OF_CHROMOSOME = N_CUBE;
+    SIZE_OF_GENE = 3;
+
+  }else if(rep=='s'){
+    REPRESENTATION="symmetric";
+    SIZE_OF_CHROMOSOME = N_SYMMETRIC_PAIR + 1;
+    SIZE_OF_GENE = 3;
+
+  }else if (rep=='g'){
+    REPRESENTATION="generative";
+    SIZE_OF_CHROMOSOME = N_AREA;
+    SIZE_OF_GENE = 7;
+
+  }
+
+}
+
+int readRestartData(vector<Individual> pops[], string filename){
+
+    // Read restart data.
+    vector<vector<double>>df;
+    int INI_GEN;
+
+    /* Representation */
+    vector<vector<string>> rep = read_csv_string(filename, 0, 0);
+    string str = rep[0][0];
+    setRepresentation(str.c_str()[0]);
+
+    /* Parameter data */
+    int rank;
+    MPI_Comm_rank( MPI_COMM_WORLD, &rank );
+    if (rank==0){
+      df = read_csv(filename, 8, -1);
+      for (vector<double> data: df){
+        int layer = data[0];
+        int ID = data[1];
+        int locus = data[2];
+
+        if (locus==0) {
+          Individual ind;
+          ind.age = data[3];
+          pops[layer].push_back(ind);
+        }
+
+        vector<double> parameter;
+        parameter.insert(parameter.end(), data.begin()+4, data.end());
+        pops[layer][ID].para.push_back(parameter);
+      }
+    }
+
+    df = read_csv(filename, 6, 6);
+    INI_GEN = (int)df[0][0];
+
+    return INI_GEN;
 }

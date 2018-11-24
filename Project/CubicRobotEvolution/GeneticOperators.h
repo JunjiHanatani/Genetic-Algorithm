@@ -26,7 +26,6 @@ struct Individual{
 };
 
 extern int gen;
-extern int N_GEN;
 
 /* --- Functions --- */
 
@@ -41,6 +40,7 @@ vector<Individual> createInitialPop(int);
 void evaluate(vector<Individual>&);
 void evaluateMPI(vector<Individual>&);
 void sort_pop(vector<Individual>&);
+vector<double> calcFitness(vector<vector<double>>&);
 
 // Selection
 vector<Individual> tournamentSelection(vector<Individual> const &, int, int);
@@ -52,13 +52,17 @@ void agelayeredSelection(vector<Individual>[]);
 // Mutation
 void mutation(vector<Individual> &);
 void mutNormal(Individual&);
+void mutSphere(Individual&);
 
 // Crossover
 void crossover(vector<Individual> &, const vector<Individual> &);
 vector<Individual> oneptcx(Individual &, const Individual &);
+vector<Individual> oneptswap(Individual &, const Individual &);
 
 void RecordLog(vector<Individual>[]);
-void setBestIndividual(void);
+void setBestIndividual(int, char**);
+void setRepresentation(char);
+int readRestartData(vector<Individual>[], string);
 
 #endif
 

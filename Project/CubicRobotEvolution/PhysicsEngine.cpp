@@ -29,7 +29,7 @@ const double ga = 9.81;
 
 // Contact parameter
 const double contactK = 1e5;
-const double FrictionCoefficient = 0.5;
+const double FrictionCoefficient = 1.0;
 vector<bool> slip(N_MASS, true);
 
 // Damping

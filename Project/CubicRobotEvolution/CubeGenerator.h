@@ -32,6 +32,7 @@ extern int N_MASS;
 extern int N_SPRING;
 extern int N_CUBE;
 extern int N_SYMMETRIC_PAIR;
+extern int N_TYPE;
 
 extern const double nodeRadius;
 extern vector<double> springInitialRestlength;

@@ -3,27 +3,33 @@
 #include <mpi.h>
 #include <vector>
 #include <math.h>
+#include <string>
 #include "Vector3D.h"
 #include "CubeGenerator.h"
 #include "utility.h"
 #include "test.h"
 #include "GeneticOperators.h"
+
 using std::cout;
 using std::endl;
 using std::vector;
 
 void test(void){
 
+int size, rank;
+MPI_Comm_rank( MPI_COMM_WORLD, &rank );
+MPI_Comm_size( MPI_COMM_WORLD, &size );
 
-Individual ind;
-ind.para =
-{{-0.017007, 0.00676091, -1.10495},
- {-0.0166607, 0.0193244, 2.5296},
- {0.00705909, 0.042877, -2.41781},
- {0.0091884, 0.00854548, -0.891256}};
-gen = 1;
-vector<Individual> pop= {ind};
-evaluateMPI(pop);
+int global_arr[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+int local_arr[10] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+
+MPI_Scatter(&global_arr, 3, MPI_INT, &local_arr, 3, MPI_INT, 0, MPI_COMM_WORLD);
+
+cout  << rank << ": ";
+for(int i=0; i<3; i++){
+  cout << local_arr[i] << " ";
+}
+cout << endl;
 
 }
 

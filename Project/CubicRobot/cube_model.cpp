@@ -27,22 +27,24 @@ const double ga = 9.81;
 // Structure
 const int N_MASS=8;
 const int N_SPRING=28;
+//const int N_MASS=4;
+//const int N_SPRING=6;
 Mass mass[N_MASS];
 Spring spring[N_SPRING];
 
 // Node parameter
 const double nodeRadius = 0.01;
 const double nodeMass = 0.1;
-vector<double> nodeInitialPosition = {0.0, 0.0, nodeRadius+0.01};
+vector<double> nodeInitialPosition = {0.0, 0.0, nodeRadius+0.0};
 
 // Edge parameter
 const double springK = 1e3;
-const double springDampingC = 1e-1;
+const double springDampingC = 1e1;
 vector<double> initial_length(N_SPRING);
 
 // Contact parameter
 const double contactK = 1e5;
-const double contactDampingC = 1e1;
+const double contactDampingC = 1e-1;
 const double FrictionCoefficient = 0.5;
 vector<bool> slip(N_MASS, true);
 
@@ -52,7 +54,6 @@ const double breathe_amp = 0.03;
 const double breathe_freq = 1.0;
 
 void InitializeCube(void){
-
   mass[0].p = {0.0, 0.0, 0.0};
   mass[1].p = {0.1, 0.0, 0.0};
   mass[2].p = {0.1, 0.1, 0.0};
@@ -61,6 +62,10 @@ void InitializeCube(void){
   mass[5].p = {0.1, 0.0, 0.1};
   mass[6].p = {0.1, 0.1, 0.1};
   mass[7].p = {0.0, 0.1, 0.1};
+  //mass[0].p = {0.0, 0.0, 0.0};
+  //mass[1].p = {0.1, 0.0, 0.0};
+  //mass[2].p = {0.05, 0.05*sqrt(3), 0.0};
+  //mass[3].p = {0.05, 0.05*sqrt(3)/3.0, sqrt(0.0025*3-0.05*0.05)};
 
     // Set initial mass conditions.
   for (int i=0; i<N_MASS; i++){
@@ -69,6 +74,7 @@ void InitializeCube(void){
       mass[i].v = {0.0, 0.0, 0.0};
       mass[i].a = {0.0, 0.0, 0.0};
   }
+  //mass[0].v[2] = -1.0;
 
   // Set initial spring conditions.
   int k=0;
@@ -125,9 +131,30 @@ void PhysicsEngine(void){
   // Spring Force ---------------------------------------------------------------
   for(int i=0; i<N_SPRING; i++){
 
-    if (_Breathe){
-        spring[i].l0 = initial_length[i] + breathe_amp * sin(2.0*PI*breathe_freq*t);
+    if(breatheID==0){
+         spring[i].l0 = initial_length[i] + breathe_amp * sin(2.0*PI*breathe_freq*t);
+    }else if(breatheID==1){
+        if ((spring[i].masses[0]==0 && spring[i].masses[1] ==2) ||
+            (spring[i].masses[0]==1 && spring[i].masses[1] ==3) ){
+            spring[i].l0 = initial_length[i] + breathe_amp * sin(2.0*PI*breathe_freq*t);
+        }else if
+           ((spring[i].masses[0]==4 && spring[i].masses[1] ==6) ||
+            (spring[i].masses[0]==5 && spring[i].masses[1] ==7) ){
+            spring[i].l0 = initial_length[i] + breathe_amp * cos(2.0*PI*breathe_freq*t);
+        }
+    }else if(breatheID==2){
+        if (spring[i].masses[0]==0 && spring[i].masses[1] ==1){
+            spring[i].l0 = initial_length[i] + breathe_amp * sin(2.0*PI*breathe_freq*t);
+        }else if((spring[i].masses[0]==2 && spring[i].masses[1] ==3)){
+            spring[i].l0 = initial_length[i] + breathe_amp * cos(2.0*PI*breathe_freq*t + 1.0 * PI/2.0);
+        }else if((spring[i].masses[0]==4 && spring[i].masses[1] ==5)){
+            spring[i].l0 = initial_length[i] + breathe_amp * cos(2.0*PI*breathe_freq*t + 2.0 * PI/2.0);
+        }else if((spring[i].masses[0]==6 && spring[i].masses[1] ==7)){
+            spring[i].l0 = initial_length[i] + breathe_amp * cos(2.0*PI*breathe_freq*t + 3.0 * PI/2.0);
+        }
     }
+
+    //}
 
     // A pair of masses associated with the i-th spring.
     int index1 = spring[i].masses[0];
@@ -159,12 +186,18 @@ void PhysicsEngine(void){
       force[i] = add(force[i], nudgeForce);
       nudgeForce = {0.0, 0.0, 0.0}; // Reset force.
     }
-    totalEE += 0.0;
+    //totalEE += 0.0;
 
     // Gravitational Force -------------------------------------------------------
     vector<double>grav_force = {0.0, 0.0, -mass[i].m*ga};
     force[i] = add(force[i], grav_force);
     totalPEg += mass[i].m * ga * mass[i].p[2];
+
+    // Drag Force ----------------------------------------------------------------
+    if (_Damping){
+      vector<double>drag_force = scaling(mass[i].v, -1e-2);
+      force[i] = add(force[i], drag_force);
+    }
 
     // Contact Force --------------------------------------------------------------
     if(mass[i].p[2] < nodeRadius){
@@ -204,7 +237,7 @@ void PhysicsEngine(void){
     for (int j=0; j<3; j++){
       mass[i].a[j] = force[i][j]/mass[i].m;
       mass[i].v[j] += mass[i].a[j] * dt;
-      if (_Damping) mass[i].v[j] = allDampingC * mass[i].v[j];
+      //if (_Damping) mass[i].v[j] = allDampingC * mass[i].v[j];
       if (!slip[i] && (j==0 || j==1)) mass[i].v[j]=0.0;
       mass[i].p[j] += mass[i].v[j] * dt;
     }
@@ -218,6 +251,6 @@ void PhysicsEngine(void){
   auto time1 = std::chrono::system_clock::now();
   elapsed_seconds = time1-time0;
 
-  RecordLog(false);
+  RecordLog(true);
 
 }

@@ -11,8 +11,8 @@ using std::string;
 double PI=acos(-1);
 
 std::random_device seed_gen;
-//std::mt19937 mt_engine(seed_gen());
-std::mt19937 mt_engine(1);
+std::mt19937 mt_engine(seed_gen());
+//std::mt19937 mt_engine(1);
 int get_rand_range_int(int min_val, int max_val) {
     std::uniform_int_distribution<int> gen_rand_uni_int( min_val, max_val );
     return gen_rand_uni_int(mt_engine);
@@ -65,6 +65,25 @@ vector<vector<double>> read_csv(string filename, int start_line, int end_line)
         }
         if(i == end_line) break;
 
+        i++;
+    }
+
+    return result;
+}
+
+vector<vector<string>> read_csv_string(string filename, int start_line, int end_line)
+{
+    std::ifstream ifs(filename);
+    vector<vector<string>> result;
+    string line;
+    int i=0;
+
+    while (getline(ifs, line)) {
+        if (i>=start_line){
+            vector<string> strvec = split(line, ',');
+            result.push_back(strvec);
+        }
+        if(i == end_line) break;
         i++;
     }
 

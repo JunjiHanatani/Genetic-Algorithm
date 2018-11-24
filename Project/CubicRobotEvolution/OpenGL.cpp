@@ -18,7 +18,7 @@ using std::string;
 using std::vector;
 
 // Paraeter
-const double SCALE = 500.0;
+const double SCALE = 300.0;
 
 // Window Setting
 const int WindowPositionX = 200;  //Window x position
@@ -44,9 +44,9 @@ int captured_frame = 0;
 //----------------------------------------------------
 // Initial Viewpoint
 //----------------------------------------------------
-const double InitialViewPointX = 0.0;
-const double InitialViewPointY = -700.0;
-const double InitialViewPointZ = 100.0;
+const double InitialViewPointX = 300.0;
+const double InitialViewPointY = -1000.0;
+const double InitialViewPointZ = 300.0;
 const double ViewPointR = sqrt(InitialViewPointX * InitialViewPointX + InitialViewPointY * InitialViewPointY);
 const double ViewPointTheta = atan2(InitialViewPointY, InitialViewPointX);
 const double omega = 2.0 * PI * 0.1;
@@ -87,6 +87,19 @@ MaterialStruct ms_ruby  = {
   {0.61424,  0.04136,  0.04136,   1.0},
   {0.727811, 0.626959, 0.626959,  1.0},
   76.8};
+
+MaterialStruct ms_white_plastic  = {
+  {0.0,   0.0,     0.0,  1.0},
+  {0.55,  0.55,    0.55, 1.0},
+  {0.70,  0.70,    0.70, 1.0},
+  32};
+
+// pearl
+MaterialStruct ms_pearl  = {
+  {0.25,     0.20725,  0.20725,  1.0},
+  {1,        0.829,    0.829,    1.0},
+  {0.296648, 0.296648, 0.296648, 1.0},
+  10.24};
 
 //----------------------------------------------------
 // Color
@@ -156,11 +169,11 @@ void Initialize(void){
   glEnable(GL_DEPTH_TEST);//Use depth buffer: (Assign GLUT_DEPTH using glutInitDisplayMode())
 
   //Set a light source --------------------------------------
-  GLfloat light_position0[] = { -1000.0, -1000.0, 1000.0, 1.0 }; //Coordinate of a light source 0
-  //GLfloat light_position1[] = { 1000.0, -1000.0, 1000.0, 1.0 }; //Coordinate of a light source 0
+  GLfloat light_position0[] = { 0.0, -300.0, 500.0, 1.0 }; //Coordinate of a light source 0
+  GLfloat light_position1[] = { 3000.0, 0.0, 0.0, 1.0 }; //Coordinate of a light source 0
 
   glLightfv(GL_LIGHT0, GL_POSITION, light_position0); //
-  //glLightfv(GL_LIGHT1, GL_POSITION, light_position1); //
+  glLightfv(GL_LIGHT1, GL_POSITION, light_position1); //
 
   // Create display list
   listNumber = glGenLists(1);
@@ -170,13 +183,13 @@ void Initialize(void){
 // Set a perspective projection matrix ------------------------------
   glMatrixMode(GL_PROJECTION);//Matrix mode (GL PROJECTION: Perspective projection matrix)
   glLoadIdentity();//Initialize a matrix
-  gluPerspective(30.0, (double)WindowWidth/(double)WindowHeight, 0.1, 1000.0); //Apparent volume gluPerspactive(th, w/h, near, far);
+  gluPerspective(30.0, (double)WindowWidth/(double)WindowHeight, 0.1, 2000.0); //Apparent volume gluPerspactive(th, w/h, near, far);
 
   //Viewpoint
   gluLookAt(
       InitialViewPointX, InitialViewPointY, InitialViewPointZ, // Viewpoint: x,y,z;
-      0.0,        0.0,        0.0,        // Reference point: x,y,z
-      0.0,        0.0,        1.0 );      //Vector: x,y,z
+      300.0,        0.0,        0.0,        // Reference point: x,y,z
+      0.0,        0.0,        1.0 );        //Vector: x,y,z
 
   // Initialize rotate matrix
   qrot(rt, cq);
@@ -224,13 +237,14 @@ void Display(void) {
 
   //Shadow ON-----------------------------
   glEnable(GL_LIGHTING);
-  glEnable(GL_LIGHT0);//Use a light source 0
+  glEnable(GL_LIGHT0); //Use a light source 0
+  glEnable(GL_LIGHT1); //Use a light source 0
 
   // Objects -------------------------
   if (_Hide){
-    CubicRobotSolid();
+    CubicRobotSolid(mass);
   }else{
-    CubicRobot();
+    CubicRobot(mass);
   }
 
   // Shadow OFF -----------------------------
@@ -400,22 +414,61 @@ void SpecialKey(int key, int x, int y){
 //----------------------------------------------------
 
 void Ground(void) {
-    double ground_max_x = 1000.0;
-    double ground_max_y = 1000.0;
+    double ground_max_x = 3000.0;
+    double ground_max_y = 3000.0;
     glColor3d(0.8, 0.8, 0.8);  // Color of the ground
+    GLdouble floor_normal[3] = { 0.0, 0.0, 1.0 };
     glLineWidth(1.0d);
+    double dl = 30.0;
 
-    // Draw lines.
+    /*// Draw lines.
     glBegin(GL_LINES);
     // Horizontal lines.
-    for(double ly = -ground_max_y ;ly <= ground_max_y; ly+=20.0){
+    for(double ly = -ground_max_y ;ly <= ground_max_y; ly+=dl){
       glVertex3d(-ground_max_x, ly, 0);
       glVertex3d(ground_max_x, ly, 0);
     }
     // Vertical lines.
-    for(double lx = -ground_max_x ;lx <= ground_max_x; lx+=20.0){
+    for(double lx = -ground_max_x ;lx <= ground_max_x; lx+=dl){
       glVertex3d(lx, ground_max_y,0);
       glVertex3d(lx, -ground_max_y,0);
+    }
+    glEnd();
+    */
+
+    glColor3d(0.9, 0.9, 0.9);  // Color of the ground
+    glBegin(GL_QUADS);
+    for(double ly = -ground_max_y ;ly <= ground_max_y; ly+=dl){
+      for(double lx = -ground_max_x ;lx <= ground_max_x; lx+=dl){
+        if ((int)((lx+ly)/dl)%2 == 0){
+          GLdouble floor_vertices[][3] = {{lx,   ly,    0.0},
+                                         {lx+dl, ly,    0.0},
+                                         {lx+dl, ly+dl, 0.0},
+                                         {lx,    ly+dl, 0.0}};
+          glNormal3dv(floor_normal);
+          for (int k=0; k<4; k++){
+            glVertex3dv(floor_vertices[k]);
+          }
+        }
+      }
+    }
+    glEnd();
+
+    glColor3d(0.5, 0.5, 0.5);  // Color of the ground
+    glBegin(GL_QUADS);
+    for(double ly = -ground_max_y ;ly <= ground_max_y; ly+=dl){
+      for(double lx = -ground_max_x ;lx <= ground_max_x; lx+=dl){
+        if ((int)((lx+ly)/dl)%2 != 0){
+          GLdouble floor_vertices[][3] = {{lx,   ly,    0.0},
+                                         {lx+dl, ly,    0.0},
+                                         {lx+dl, ly+dl, 0.0},
+                                         {lx,    ly+dl, 0.0}};
+          glNormal3dv(floor_normal);
+          for (int k=0; k<4; k++){
+            glVertex3dv(floor_vertices[k]);
+          }
+        }
+      }
     }
     glEnd();
 }
@@ -424,7 +477,7 @@ void Ground(void) {
 // Draw Cubic Robot
 //----------------------------------------------------
 
-void CubicRobot(void){
+void CubicRobot(vector<Mass> mass){
   // Masses
   for(int i=0; i<N_MASS; i++){
     glPushMatrix();
@@ -453,6 +506,8 @@ void CubicRobot(void){
 
     double dx = 0.3;
     int color_index = (int) ((spring[i].l0 / springInitialRestlength[i] - (1.0 - dx)) * 5.0 / dx);
+    if (color_index < 0) color_index = 0;
+    if (color_index > 10) color_index = 10;
     glMaterialfv(GL_FRONT, GL_DIFFUSE, RdBu[color_index]);
 
     vector<double> begin_pt = mass[spring[i].masses[0]].p;
@@ -472,16 +527,16 @@ void CubicRobot(void){
 }
 
 
-void CubicRobotSolid(void){
+void CubicRobotSolid(vector<Mass> mass){
 
   for (std::array<int, 8> vertex:vertices){
 
     glPushMatrix();
-    glMaterialfv(GL_FRONT, GL_AMBIENT, ms_jade.ambient);
-    glMaterialfv(GL_FRONT, GL_DIFFUSE, ms_jade.diffuse);
-    glMaterialfv(GL_FRONT, GL_SPECULAR, ms_jade.specular);
-    glMaterialfv(GL_FRONT, GL_SHININESS, &ms_jade.shininess);
-
+    //GLfloat color[] = {green[0], green[1], green[2], 0.1};
+    glMaterialfv(GL_FRONT, GL_DIFFUSE, ms_pearl.diffuse);
+    glMaterialfv(GL_FRONT, GL_AMBIENT, ms_pearl.ambient);
+    glMaterialfv(GL_FRONT, GL_SPECULAR, ms_pearl.specular);
+    glMaterialfv(GL_FRONT, GL_SHININESS, &ms_pearl.shininess);
     glBegin(GL_QUADS);
     for (int j = 0; j < 6; ++j) {
       glNormal3dv(normal[j]);
@@ -495,6 +550,7 @@ void CubicRobotSolid(void){
       }
     }
     glEnd();
+    glPopMatrix();
 
     glColor3d(0.0, 0.0, 0.0);
     glBegin(GL_LINES);

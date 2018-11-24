@@ -3,6 +3,8 @@
 
 #include <string>
 #include <vector>
+#include "CubeGenerator.h"
+
 using std::string;
 using std::vector;
 
@@ -21,8 +23,8 @@ void qmul(double[], const double[], const double[]);
 void qrot(double[], double[]);
 void mouse_motion(int, int);
 void mouse_on(int, int, int, int);
-void CubicRobot(void);
-void CubicRobotSolid(void);
+void CubicRobot(vector<Mass>);
+void CubicRobotSolid(vector<Mass>);
 void fixed_view(int);
 void glDrawAxisd(double);
 void getMatrix(void);

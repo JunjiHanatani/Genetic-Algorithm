@@ -28,15 +28,16 @@ const char WindowTitle[] = "Cubic Robot";  //Window title
 
 // Output video
 bool _Rec = false;
-bool _AutoView = false;
+bool _AutoView = true;
 bool _ControlView = true;
 
-bool _Friction = false;
-bool _Damping = false;
-bool _Breathe = false;
+bool _Friction = true;
+bool _Damping = true;
+bool _Breathe = true;
 
 vector<double> nudgeForce = {0.0, 0.0, 0.0};
 int nudgeID = -1;
+int breatheID = 0;
 int captured_frame = 0;
 //----------------------------------------------------
 // Initial Viewpoint
@@ -104,8 +105,11 @@ void Initialize(void){
   glEnable(GL_DEPTH_TEST);//Use depth buffer: (Assign GLUT_DEPTH using glutInitDisplayMode())
 
   //Set a light source --------------------------------------
-  GLfloat light_position0[] = { 0.0, -100.0, -100.0, 1.0 }; //Coordinate of a light source 0
+  GLfloat light_position0[] = { -1000.0, -1000.0, 1000.0, 1.0 }; //Coordinate of a light source 0
+  //GLfloat light_position1[] = { 1000.0, -1000.0, 1000.0, 1.0 }; //Coordinate of a light source 0
+
   glLightfv(GL_LIGHT0, GL_POSITION, light_position0); //
+  //glLightfv(GL_LIGHT1, GL_POSITION, light_position1); //
 
   // Create display list
   listNumber = glGenLists(1);
@@ -151,9 +155,11 @@ void Display(void) {
     double ViewPointZ = InitialViewPointZ;
     gluLookAt(
       ViewPointX, ViewPointY, ViewPointZ,           // Viewpoint: x,y,z;
-      center_point[0], center_point[1], center_point[2],     // Reference point: x,y,z
+      center_point[0], center_point[1], 0.0,     // Reference point: x,y,z
       0.0,        0.0,        1.0 );                //　Vector: x,y,z
 
+  GLfloat light_position0[] = { (GLfloat) ViewPointX, (GLfloat) ViewPointY, (GLfloat) ViewPointZ, 1.0 }; //Coordinate of a light source 0
+  glLightfv(GL_LIGHT0, GL_POSITION, light_position0);
   }
 
   // Set a model view matrix --------------------------
@@ -161,12 +167,14 @@ void Display(void) {
   glLoadIdentity(); //Initialize a matrix
   glViewport(0, 0, WindowWidth, WindowHeight);
 
+
   // Rotation -------------------------
   if(_ControlView) glMultMatrixd(rt);
 
   //Shadow ON-----------------------------
   glEnable(GL_LIGHTING);
   glEnable(GL_LIGHT0);//Use a light source 0
+  //glEnable(GL_LIGHT1);//Use a light source 1
 
   // Objects -------------------------
   //PopUpBall();
@@ -237,7 +245,10 @@ void Keyboard(unsigned char key, int x, int y){
     break;
 
   case 'b':
-    if (_Breathe){
+    breatheID += 1;
+    if (breatheID >= 3) breatheID=-1;
+
+    if (breatheID == -1){
       _Breathe=false;
     }else{
       _Breathe=true;
@@ -378,10 +389,13 @@ void CubicRobot(void){
 
   // Springs
   GLUquadricObj *bars[N_SPRING];
-  glMaterialfv(GL_FRONT, GL_DIFFUSE, green);
 
   for(int i=0; i<N_SPRING; i++){
     glPushMatrix();
+
+    if (breatheID == i) {glMaterialfv(GL_FRONT, GL_DIFFUSE, yellow);}
+    else{glMaterialfv(GL_FRONT, GL_DIFFUSE, green);}
+
     vector<double> begin_pt = mass[spring[i].masses[0]].p;
     vector<double> end_pt = mass[spring[i].masses[1]].p;
     begin_pt = scaling(begin_pt, SCALE);
@@ -417,7 +431,6 @@ void CubicRobot(void){
 
 void DISPLAY_TEXT(int x, int y, string str){
   static int list=0;
-
   glDisable(GL_LIGHTING);
   glDisable(GL_LIGHT0);
 
@@ -429,7 +442,7 @@ void DISPLAY_TEXT(int x, int y, string str){
   glMatrixMode(GL_MODELVIEW);
   glPushMatrix();
   glLoadIdentity();
-  glColor3f(0.0, 0.0, 0.0);
+  glColor3b(0.0, 0.0, 0.0);
   glCallList(list);
   glPopMatrix();
   glMatrixMode(GL_PROJECTION);
@@ -442,8 +455,8 @@ void DISPLAY_TEXT(int x, int y, string str){
   DRAW_STRING(x, y, str , GLUT_BITMAP_TIMES_ROMAN_24);
   glEndList();
 
-glEnable(GL_LIGHTING);
-glEnable(GL_LIGHT0);
+  glEnable(GL_LIGHTING);
+  glEnable(GL_LIGHT0);
 }
 
 void DRAW_STRING(int x, int y, string str, void *font){

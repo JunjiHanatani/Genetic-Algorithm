@@ -14,6 +14,7 @@ extern std::mt19937 mt_engine;
 int get_rand_range_int(int, int);
 double get_rand_range_dbl(double, double);
 vector<vector<double>> read_csv(string, int, int);
+vector<vector<string>> read_csv_string(string, int, int);
 
 extern double PI;
 

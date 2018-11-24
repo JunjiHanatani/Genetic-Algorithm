@@ -25,6 +25,7 @@ void CubicRobot(void);
 void fixed_view(int);
 void glDrawAxisd(double);
 void getMatrix(void);
+
 // Window Setting
 extern const int WindowPositionX;  //Window x position
 extern const int WindowPositionY;  //Window y position
@@ -38,6 +39,7 @@ extern bool _Damping;
 extern bool _Breathe;
 
 extern int frame;
+extern int nt;
 extern double t;
 extern double dt;
 extern double dt_ms;
@@ -45,4 +47,5 @@ extern const double PI;
 
 extern vector<double> nudgeForce;
 extern int nudgeID;
+extern int breatheID;
 #endif
