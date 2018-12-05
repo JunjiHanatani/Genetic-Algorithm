@@ -25,22 +25,22 @@ string REPRESENTATION;
 int SIZE_OF_CHROMOSOME;
 int SIZE_OF_GENE;
 
-static const int N_AREA = 10;
-static const int N_ELITES = 1;
+static const int N_AREA = 5;
+static const int N_ELITES = 3;
 static const int N_TOURNAMENT = 3;
 static const int N_LAYERS = 6;
-static const double P_MUT = 0.7;
+static const double P_MUT = 0.5;
 static const double RATE_OVERAGE = 0.2;
-int MAX_AGE[N_LAYERS] = {5, 10, 20, 40, 80};
+int MAX_AGE[N_LAYERS-1] = {5, 10, 20, 40, 80};
 static double const T_MAX = 9.0;
 static double const T_MIN = 2.0;
 double offset_range[2] = {-0.03, 0.03};
 double amp_range[2] = {0.0, 0.05};
 double phase_range[2] = {-PI, PI};
 double center_range[2] = {-0.12, 0.12};
-double center_range_z[2] = {-0.2, 0.22};
+double center_range_z[2] = {-0.02, 0.22};
 double radius_range[2] = {0.0, 0.175};
-static const double thresh = 0.005;
+static const double thresh = 0.01;
 static const double alpha = 1;
 
 double duration[5];
@@ -54,7 +54,7 @@ static int const AVE_RANGE_MIN = NT_MIN / NT_CYCLE;        // = 3;
 
 // -----------------------------------------------
 // CREATE INITIAL POPULATION
-// -----------------------------------------------
+// ------------------------------------------------
 
 vector<Individual> createInitialPop(int num){
 
@@ -145,10 +145,10 @@ void evaluateMPI(vector<Individual>&pop){
   double global_distance[N_POP*3];
   double local_err[N_POP*3];
   double global_err[N_POP*3];
-  double local_trajectory[N_POP*3*3*SIZE_TRAJECTORY];
-  double global_trajectory[N_POP*3*3*SIZE_TRAJECTORY];
-  double local_parameter[N_POP*SIZE_OF_CHROMOSOME*7];
-  double global_parameter[N_POP*SIZE_OF_CHROMOSOME*7];
+  double local_trajectory[N_POP*3* 3* SIZE_TRAJECTORY];
+  double global_trajectory[N_POP*3* 3* SIZE_TRAJECTORY];
+  double local_parameter[N_POP*3 * SIZE_OF_CHROMOSOME*SIZE_OF_GENE];
+  double global_parameter[N_POP*3 * SIZE_OF_CHROMOSOME*SIZE_OF_GENE];
   int num;
   int num_mpi;
 
@@ -265,23 +265,26 @@ vector<double> calcFitness(vector<vector<double>> &center_list){
   vector<double> results;
 
   /* --- Calc. travel length --- */
-  //local_distance[iter] = calcDistance(center_list[0], center_list.back());
-  distance = center_list.back()[0] - center_list[0][0];
+  //distance = calcDistance(center_list[0], center_list.back());
+  distance = center_list.back()[0];
 
   /* --- Calc. error --- */
 
-  vector<double> z_list, y_list;
+  vector<double> z_list, y_list, x_list;
   for (int j=AVE_RANGE_MIN; j<SIZE_TRAJECTORY; j++){
+    x_list.push_back(center_list[j][0]);
     y_list.push_back(center_list[j][1]);
     z_list.push_back(center_list[j][2]);
   }
 
-  int size_of_list = y_list.size();
-  double ave = std::accumulate(z_list.begin(), z_list.end(), 0.0) / size_of_list;
+  int size_of_list = x_list.size();
+  double z_ave = std::accumulate(z_list.begin(), z_list.end(), 0.0) / size_of_list;
+  //double slope = y_list.back()/x_list.back();
   err = 0.0;
   for(int k=0; k<size_of_list; k++){
-    err += fabs(z_list[k] - ave);
-    err += sqrt(pow ((z_list[k] - ave), 2) + pow (y_list[k]* 0.2, 2));
+    //err += fabs(z_list[k] - ave);
+    //err += sqrt(pow ((z_list[k] - z_ave), 2) + pow ((y_list[k] - x_list[k]*slope) * 0.2, 2));
+    err += sqrt(pow ((z_list[k] - z_ave), 2) + pow (y_list[k] * 0.2, 2));
   }
   err = err/size_of_list;
 
@@ -384,8 +387,28 @@ vector<Individual> elitistSelection(vector<Individual> const &pop, int n_elites)
     int num = pop.size();
     if (N_ELITES <= num){
       for (int i=0; i<N_ELITES; i++) elites.push_back(pop[i]);
+    }else{
+      elites = pop;
     }
     return elites;
+}
+
+vector<Individual> agebaseElitistSelection(vector<Individual> const &pop, int n_elites){
+
+  vector<Individual> elites;
+
+  for(int age=gen+1; age>0; age-=1){
+    int cnt = 0;
+    for(Individual ind: pop){
+      if(ind.age==age) {
+        cnt += 1;
+        elites.push_back(ind);
+        if (cnt==n_elites)break;
+      }
+    }
+  }
+
+  return elites;
 }
 
 vector<Individual> overageSelection(vector<Individual>&offspring, int id){
@@ -400,7 +423,7 @@ vector<Individual> overageSelection(vector<Individual>&offspring, int id){
     return overages;
 }
 
-void agelayeredSelection(vector<Individual>pops[]){
+void agelayeredSelection_old(vector<Individual>pops[]){
 
     vector<Individual> overages[N_LAYERS];
     vector<Individual> elites(N_ELITES);
@@ -417,7 +440,7 @@ void agelayeredSelection(vector<Individual>pops[]){
         int N = N_POP*RATE_OVERAGE;
         int m = pops[id].size();
         int n = overages[id].size();
-
+        cout << m << endl;
         if (m < M && n < N){
             pops[id].insert(pops[id].end(), overages[id].begin(), overages[id].end());
 
@@ -459,6 +482,40 @@ void agelayeredSelection(vector<Individual>pops[]){
 
 }
 
+void agelayeredSelection(vector<Individual>pops[]){
+
+    vector<Individual> overages[N_LAYERS];
+
+    for (int id=0; id<N_LAYERS; id++){
+
+        /* --- Overages --- */
+        if (id != N_LAYERS-1){
+            overages[id+1] = overageSelection(pops[id], id);
+        }
+
+        pops[id].insert(pops[id].end(), overages[id].begin(), overages[id].end());
+        if (pops[id].size() <= N_POP) continue;
+
+        /* --- Elite Selection --- */
+        sort_pop(pops[id]);
+        vector<Individual> elites = agebaseElitistSelection(pops[id], N_ELITES);
+
+        /* --- Selection --- */
+
+        int N = N_POP - elites.size();
+        sort_pop(elites);
+        if (N >= (int) N_POP*0.3){
+          pops[id] = tournamentSelection(pops[id], N, N_TOURNAMENT);
+        }else{
+          N = (int) N_POP * 0.3;
+          pops[id] = tournamentSelection(pops[id], N , N_TOURNAMENT);
+          elites = tournamentSelection(elites, N_POP - N, N_TOURNAMENT);
+        }
+        pops[id].insert(pops[id].end(), elites.begin(), elites.end());
+
+    }
+
+}
 
 // -----------------------------------------------
 // MUTATION
@@ -503,13 +560,13 @@ void mutSphere(Individual &ind){
 // CROSSOVER
 // -----------------------------------------------
 
-void crossover(vector<Individual> &pop1, const vector<Individual> &pop2){
+void crossover(vector<Individual> &pop1, vector<Individual> &pop2){
 
     int num = pop1.size();
     vector<Individual> add_pop;
-    //std::shuffle(pop2.begin(), pop2.end(), mt_engine);
+    std::shuffle(pop2.begin(), pop2.end(), mt_engine);
     for(int i=0; i<num; i++){
-        vector<Individual> children = oneptcx(pop1[i], pop2[i]);
+        vector<Individual> children = area_cx(pop1[i], pop2[i]);
         if (children.size()!=0){
             add_pop.insert(add_pop.end(), children.begin(), children.end());
         }
@@ -573,6 +630,61 @@ vector<Individual> oneptswap(Individual &ind1, const Individual &ind2){
     return children;
 }
 
+vector<Individual> area_cx(Individual &ind1, const Individual &ind2){
+
+    int rand_area = get_rand_range_int(0, N_AREA-1);
+    int num = get_rand_range_int(1, N_AREA-2);
+
+    vector<Individual> children;
+    vector<double> distance_list1, distance_list2;
+    vector<double> pt0 = {ind1.para[rand_area][3], ind1.para[rand_area][4], ind1.para[rand_area][5]};
+
+    for (int j=0; j<N_AREA; j++){
+
+      double x = ind1.para[j][3];
+      double y = ind1.para[j][4];
+      double z = ind1.para[j][5];
+      vector<double> pt1 = {x, y, z};
+      distance_list1.push_back(calcDistance(pt0, pt1));
+
+    }
+
+    for (int j=0; j<N_AREA; j++){
+
+      double x = ind2.para[j][3];
+      double y = ind2.para[j][4];
+      double z = ind2.para[j][5];
+      vector<double> pt1 = {x, y, z};
+      distance_list2.push_back(calcDistance(pt0, pt1));
+
+    }
+
+    vector<int> indices1 = argsort(distance_list1);
+    vector<int> indices2 = argsort(distance_list2);
+
+    // Swap.
+    vector<vector<double>> para1 = ind1.para;
+    vector<vector<double>> para2 = ind2.para;
+    vector<vector<double>> child_para1 = ind1.para ;
+    vector<vector<double>> child_para2 = ind2.para;
+
+    for (int i=0; i<num; i++){
+      int index1 = indices1[i];
+      int index2 = indices2[i];
+      child_para1[index1] = para2[index2];
+      child_para2[index2] = para1[index1];
+    }
+    int age = std::max(ind1.age, ind2.age);
+
+    // New individuals.
+    Individual child1; child1.para=child_para1; child1.age=age;
+    Individual child2; child2.para=child_para2; child2.age=age;
+    children = {child1, child2};
+
+    return children;
+}
+
+
 void alpsGA(vector<Individual>pops[]){
     int rank;
     MPI_Comm_rank( MPI_COMM_WORLD, &rank );
@@ -591,7 +703,8 @@ void alpsGA(vector<Individual>pops[]){
             continue;
         }
 
-        vector<Individual> elites = elitistSelection(pops[id], N_ELITES);
+        //vector<Individual> elites = elitistSelection(pops[id], N_ELITES);
+        vector<Individual> elites = agebaseElitistSelection(pops[id], N_ELITES);
         vector<Individual> offspring = pops[id];
 
         // --------------------------------------
@@ -657,13 +770,13 @@ void alpsGA(vector<Individual>pops[]){
     /* --- Output next generations --- */
     for (int id=0; id<N_LAYERS; id++){
       ofs_log << "    LAYER" << id << "|";
+      if(pops[id].size()!=0) ofs_log << " Best fitness=" << pops[id][0].fitness;
       vector<double> age_list;
       for (Individual ind:pops[id]) age_list.push_back(ind.age);
       for (int age=1; age<=gen+1; age++){
           size_t n_count = std::count(age_list.begin(), age_list.end(), age);
           if (n_count!=0) ofs_log << " AGE " << age << "(" << n_count << ") ";
       }
-      if(pops[id].size()!=0) ofs_log << "Best fitness=" << pops[id][0].fitness;
       ofs_log << endl;
     }
 
@@ -901,7 +1014,7 @@ void RecordLog(vector<Individual>pops[]){
                 << SIZE_OF_CHROMOSOME << endl;
 
     ofs_restart << "MAX_AGE" << endl;
-    for(int i=0; i<N_LAYERS; i++) ofs_restart << MAX_AGE[i] << ",";
+    for(int age: MAX_AGE) ofs_restart << age << ",";
     ofs_restart << endl;
 
     ofs_restart << "Generation" << endl;
@@ -936,38 +1049,6 @@ void RecordLog(vector<Individual>pops[]){
     tm_global.restart();
 
     ofs_log << "        Done." << endl << endl;
-}
-
-void setBestIndividual(int argc, char **argv){
-  Individual ind;
-  int i = 0;
-
-  string filename;
-  if (argc <= 2){
-    filename = "./log/parameter/para_" + std::to_string(N_GEN) + ".csv";
-  }else{
-    filename = argv[2];
-  }
-
-  vector<vector<string>> strvec = read_csv_string(filename, 0, 0);
-  REPRESENTATION = strvec[0][0];
-
-  if (REPRESENTATION=="direct"){
-    SIZE_OF_CHROMOSOME = N_SPRING;
-  }else if(REPRESENTATION=="cubic"){
-    SIZE_OF_CHROMOSOME = N_CUBE;
-  }else if(REPRESENTATION=="symmetric"){
-    SIZE_OF_CHROMOSOME = N_SYMMETRIC_PAIR + 1;
-  }else if (REPRESENTATION=="generative"){
-    SIZE_OF_CHROMOSOME = N_AREA;
-  }
-
-  int INI = 2 + SIZE_OF_CHROMOSOME * i;
-  int FIN = INI + SIZE_OF_CHROMOSOME - 1;
-
-  vector<vector<double>> parameter_table = read_csv(filename, INI, FIN);
-  SetBreathe(parameter_table, REPRESENTATION);
-
 }
 
 void setRepresentation(char rep){

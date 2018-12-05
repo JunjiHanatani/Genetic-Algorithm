@@ -26,6 +26,8 @@ struct Individual{
 };
 
 extern int gen;
+extern int SIZE_OF_CHROMOSOME;
+extern int SIZE_OF_GENE;
 
 /* --- Functions --- */
 
@@ -47,7 +49,7 @@ vector<Individual> tournamentSelection(vector<Individual> const &, int, int);
 vector<Individual> rouletteSelection(vector<Individual> &, int);
 vector<Individual> elitistSelection(vector<Individual> const &, int);
 vector<Individual> overageSelection(vector<Individual>&, int);
-void agelayeredSelection(vector<Individual>[]);
+vector<Individual> agebaseElitistSelection(vector<Individual> const &, int);
 
 // Mutation
 void mutation(vector<Individual> &);
@@ -55,12 +57,12 @@ void mutNormal(Individual&);
 void mutSphere(Individual&);
 
 // Crossover
-void crossover(vector<Individual> &, const vector<Individual> &);
+void crossover(vector<Individual> &, vector<Individual> &);
 vector<Individual> oneptcx(Individual &, const Individual &);
 vector<Individual> oneptswap(Individual &, const Individual &);
+vector<Individual> area_cx(Individual &, const Individual &);
 
 void RecordLog(vector<Individual>[]);
-void setBestIndividual(int, char**);
 void setRepresentation(char);
 int readRestartData(vector<Individual>[], string);
 

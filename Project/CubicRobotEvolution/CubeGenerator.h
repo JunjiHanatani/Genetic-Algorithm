@@ -48,5 +48,6 @@ void GenerateCube(void);
 void SetBreathe(vector<vector<double>>, string);
 void FindSymmetricSpring(void);
 void CubeLog(void);
+vector<Mass> ReadMotion(string, int , vector<double>);
 
 #endif

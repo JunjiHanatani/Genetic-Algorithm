@@ -4,6 +4,8 @@
 #include <sstream>
 #include <fstream>
 #include <string>
+#include <cstdlib>
+#include <dirent.h>
 #include "utility.h"
 using std::vector;
 using std::string;
@@ -12,7 +14,7 @@ double PI=acos(-1);
 
 std::random_device seed_gen;
 std::mt19937 mt_engine(seed_gen());
-//std::mt19937 mt_engine(1);
+//std::mt19937 mt_engine(0);
 int get_rand_range_int(int min_val, int max_val) {
     std::uniform_int_distribution<int> gen_rand_uni_int( min_val, max_val );
     return gen_rand_uni_int(mt_engine);
@@ -90,3 +92,35 @@ vector<vector<string>> read_csv_string(string filename, int start_line, int end_
     return result;
 }
 
+vector<int> argsort (vector<double> x){
+
+    std::vector<int> y(x.size());
+    std::size_t n(0);
+    std::generate(std::begin(y), std::end(y), [&]{ return n++; });
+
+    std::sort(  std::begin(y),
+                std::end(y),
+                [&](int i1, int i2) { return x[i1] < x[i2]; } );
+
+    return y;
+
+}
+
+vector<string> get_filename(const char* path){
+  vector<string> filenames;
+
+  DIR *dp;
+  dirent* entry;
+  dp = opendir(path);
+  if (dp==NULL) exit(1);
+  do {
+    entry = readdir(dp);
+    if (entry != NULL){
+      filenames.push_back(entry->d_name);
+    }
+  } while (entry != NULL);
+
+  std::sort(filenames.begin(), filenames.end());
+  return filenames;
+
+}

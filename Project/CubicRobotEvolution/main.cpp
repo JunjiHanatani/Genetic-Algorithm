@@ -5,6 +5,7 @@
 #include <sys/stat.h>
 #include <string>
 #include <mpi.h>
+#include <algorithm>
 #include "test.h"
 #include "OpenGL.h"
 #include "PhysicsEngine.h"
@@ -20,14 +21,22 @@ using std::vector;
 // Time
 int frame = 0;
 double dt_ms = 1;
+vector<Mass> robots[10];
+vector<vector<double>> df_robots[10];
+int N_ROBOTS;
+double END_TIME = 10.0;
+bool save=false;
+int slot;
 
 //----------------------------------------------------
 // Function prototype
 //----------------------------------------------------
 
-void timerDisplay(int value);
 void timerPhysicsEngine(int value);
+void timerMultiRobots( int value);
 void DisplayCube(int, char**);
+void readParameterFile(int, char**);
+void readMotionFile(char*);
 
 //----------------------------------------------------
 // Main
@@ -45,6 +54,7 @@ int main(int argc, char **argv){
   mkdir("log/parameter", 0775);
   mkdir("log/trajectory", 0775);
   mkdir("log/fitness", 0775);
+  mkdir("log/robots", 0775);
 
   GenerateCube();  //initialize cube robot setting.
 
@@ -75,7 +85,23 @@ int main(int argc, char **argv){
   else if (*argv[1]=='d'){
     MPI_Finalize();
     if (rank==0){
-      cout << "Display mode" << endl;
+      cout << "Save? (T/F)" << endl;
+      char char_save;
+      std::cin >> char_save;
+      if (char_save=='T'){
+        save = true;
+        cout << "Slot? (0-9)" << endl;
+        std::cin >> slot;
+      }
+      DisplayCube(argc, argv);
+    }
+  }
+
+  /* Multi-robot display */
+  else if (*argv[1]=='m'){
+    MPI_Finalize();
+    if (rank==0){
+      cout << "Multi-robots display mode" << endl;
       DisplayCube(argc, argv);
     }
   }
@@ -96,10 +122,17 @@ int main(int argc, char **argv){
   return 0;
 }
 
-void DisplayCube(int argc, char **argv){
+void DisplayCube(int argc, char** argv){
 
   InitializeCube();
-  setBestIndividual(argc, argv);
+
+  if(*argv[1]!='m'){
+    readParameterFile(argc, argv);
+    robots[0] = mass;
+  }else{
+    readMotionFile(argv[2]);
+    for(int i=0; i<N_ROBOTS; i++) robots[i] = mass;
+  }
 
   // GLUT initial setting
   glutInit(&argc, argv);                                    //Initialize environment.
@@ -115,7 +148,12 @@ void DisplayCube(int argc, char **argv){
   glutIdleFunc(Idle);           // Idle function.
   glutMouseFunc(mouse_on);      // Mouse on function
   glutMotionFunc(mouse_motion); // Mouse drag function
-  glutTimerFunc(dt_ms, timerPhysicsEngine, 0); // Timer
+
+  if(*argv[1]!='m'){
+    glutTimerFunc(dt_ms, timerPhysicsEngine, 0); // Timer
+  }else{
+    glutTimerFunc(dt_ms, timerMultiRobots, 1); // Timer
+  }
 
   // Initialization
   Initialize();      //initialize display setting.
@@ -130,19 +168,101 @@ void DisplayCube(int argc, char **argv){
 void timerPhysicsEngine(int value){
 
   PhysicsEngine();
+  robots[0] = mass;
 
   // Call timer function after 100ms.
   glutTimerFunc(dt_ms, timerPhysicsEngine, 0);
 
   if (nt%60 == 0){
     glutPostRedisplay();
-    TrajectoryRecord();
-    EnergyRecord();
+    if (save){
+      TrajectoryRecord(slot);
+      EnergyRecord();
+    }
   }
 
-  t = t + dt;
-  nt += 1;
+  if (!_Stop){
+    t = t + dt;
+    nt += 1;
+  }
 
-  //if (t>0.5) _Damping = true;
-  //if (t>10.0) exit(0);
+  if (t>END_TIME) exit(0);
+}
+
+// ---------------------------------------------------
+// Timer
+// ---------------------------------------------------
+void timerMultiRobots(int value){
+
+  int INI = nt*N_MASS;
+  int FIN = INI + N_MASS;
+
+  for (int i=0; i<N_ROBOTS; i++){
+    vector<double> offset = {0.0, (double)i*0.5, 0.0};
+    for (int j=INI; j<FIN; j++){
+      robots[i][j-INI].p = {df_robots[i][j][2] + offset[0],
+                            df_robots[i][j][3] + offset[1],
+                            df_robots[i][j][4] + offset[2]};
+    }
+  }
+
+  t = df_robots[0][INI][0];
+
+
+  // Call timer function after 100ms.
+  glutTimerFunc(30, timerMultiRobots, 0);
+  glutPostRedisplay();
+
+  if (!_Stop) nt += 1;
+  if (t >= 15.0) exit(0);
+  if (t >= END_TIME) exit(0);
+}
+
+void readParameterFile(int argc, char **argv){
+
+  Individual ind;
+  int i = 0;
+
+  string filename;
+  if (argc <= 2){
+    filename = "./log/parameter/para_" + std::to_string(gen) + ".csv";
+  }else{
+    filename = argv[2];
+  }
+
+  vector<vector<string>> strvec = read_csv_string(filename, 0, 0);
+  const char* rep = strvec[0][0].c_str();
+  setRepresentation(rep[0]);
+
+  int INI = 2 + SIZE_OF_CHROMOSOME * i;
+  int FIN = INI + SIZE_OF_CHROMOSOME - 1;
+
+  vector<vector<double>> parameter_table = read_csv(filename, INI, FIN);
+  SetBreathe(parameter_table, strvec[0][0]);
+
+}
+
+void readMotionFile(char* folder){
+  vector<double> time_list;
+  vector<string> filenames;
+  vector<string> strvec = get_filename(folder);
+
+  for (string str: strvec) {
+    string keyword = "robot";
+    if (std::equal(keyword.begin(), keyword.end(), str.begin())){
+      filenames.push_back(string(folder) + str);
+    }
+  }
+
+  N_ROBOTS = filenames.size();
+  cout << "Num of robots: " << N_ROBOTS << endl;
+  for (int i=0; i<N_ROBOTS; i++){
+    df_robots[i] = read_csv(filenames[i], 1, -1);
+    double end_time = df_robots[i].back()[0];
+    time_list.push_back(end_time);
+    cout << filenames[i] << " | END TIME: "<< end_time << endl;
+  }
+
+  END_TIME = *std::min_element(time_list.begin(), time_list.end());
+
 }

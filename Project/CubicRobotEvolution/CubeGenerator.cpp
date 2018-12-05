@@ -175,7 +175,7 @@ void InitializeCube(void){
 
   // --- Initial Position.
   for (int i=0; i<N_MASS; i++){
-    mass[i].p = nodeInitialPosition[i];
+    mass[i].p = add(nodeInitialPosition[i], nodePositionOffset);
     mass[i].v = {0.0, 0.0, 0.0};
     mass[i].a = {0.0, 0.0, 0.0};
   }
@@ -245,7 +245,7 @@ void SetBreathe(vector<vector<double>> parameter_table, string REPRESENTATION){
 
   }
 
-   /* SYMMETRIC REPRESENTATION */
+   /* GENERATIVE REPRESENTATION */
   else if (REPRESENTATION =="generative"){
 
     for (int i=0; i<N_SPRING; i++){

@@ -40,9 +40,11 @@ extern const char WindowTitle[];   //Window title
 extern bool _Friction;
 extern bool _Damping;
 extern bool _Breathe;
+extern bool _Stop;
 
 extern int frame;
 extern double dt_ms;
+extern vector<Mass> robots[10];
 
 extern vector<double> nudgeForce;
 extern int nudgeID;

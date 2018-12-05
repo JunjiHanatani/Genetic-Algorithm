@@ -236,23 +236,36 @@ void EnergyRecord(void){
 
 }
 
-void TrajectoryRecord(void){
+void TrajectoryRecord(int slot){
 
-  static std::ofstream ofs_trajectory("./log/trajectory.csv");
-  vector<double> center_point(3, 0.0);
-  for (int i=0; i<N_MASS; i++)center_point = add(center_point, mass[i].p);
-  center_point = scaling(center_point, 1.0/N_MASS);
+  string str;
 
-  if (nt==-1){
-      ofs_trajectory << "time" << ","
-                     << "x" << ","
-                     << "y" << ","
-                     << "z" << endl;
+  //if(nt==0){
+  //  for(int i=0; i<10; i++){
+  //    str = "./log/robots/robot" + std::to_string(i) + ".csv";
+  //    std::ifstream fs(str);
+  //    if (!fs.is_open()) break;
+  //  }
+  //}
+
+  if (nt==0) str = "./log/robots/robot" + std::to_string(slot) + ".csv";
+  static std::ofstream ofs_trajectory(str);
+
+  if(nt==0){
+    //cout << "A file: "<< str << " is created." << endl;
+    ofs_trajectory << "time" << ","
+                   << "id" << ","
+                   << "x" << ","
+                   << "y" << ","
+                   << "z" << endl;
   }
 
-  ofs_trajectory << t << ", "
-                 << center_point[0] << ","
-                 << center_point[1] << ","
-                 << center_point[2] << endl;
+  for (int i=0; i<N_MASS; i++){
+    ofs_trajectory << t << ","
+                   << i << ","
+                   << mass[i].p[0] << ","
+                   << mass[i].p[1] << ","
+                   << mass[i].p[2] << endl;
+  }
 
 }

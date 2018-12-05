@@ -15,6 +15,8 @@ int get_rand_range_int(int, int);
 double get_rand_range_dbl(double, double);
 vector<vector<double>> read_csv(string, int, int);
 vector<vector<string>> read_csv_string(string, int, int);
+vector<int> argsort (vector<double>);
+vector<string> get_filename(const char*);
 
 extern double PI;
 

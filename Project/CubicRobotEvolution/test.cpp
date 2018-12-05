@@ -10,26 +10,34 @@
 #include "test.h"
 #include "GeneticOperators.h"
 
+
 using std::cout;
 using std::endl;
 using std::vector;
 
 void test(void){
 
-int size, rank;
-MPI_Comm_rank( MPI_COMM_WORLD, &rank );
-MPI_Comm_size( MPI_COMM_WORLD, &size );
+  double x = 1.0;
+  int num[5] = {0, 1, 2, 3, 4};
+  double* p = &x;
+  int* pi;
 
-int global_arr[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
-int local_arr[10] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+  cout << num << endl;
+  pi = num;
 
-MPI_Scatter(&global_arr, 3, MPI_INT, &local_arr, 3, MPI_INT, 0, MPI_COMM_WORLD);
+  cout << p << endl;
+  cout << pi[0] << endl;
 
-cout  << rank << ": ";
-for(int i=0; i<3; i++){
-  cout << local_arr[i] << " ";
-}
-cout << endl;
+  for(int& i:num) i = i + 1;
+  //for (int i=0; i<5; i++){
+    //num[i] += 1;
+    //int& j = num[i];
+    //j += 1;
+  //}
+
+  cout << num[0] << endl;
+  cout << num[1] << endl;
+  cout << num[2] << endl;
 
 }
 

@@ -32,7 +32,7 @@ bool _Rec = false;
 bool _AutoView = false;
 bool _ControlView = true;
 bool _Hide = true;
-
+bool _Stop = false;
 bool _Friction = true;
 bool _Damping = true;
 bool _Breathe = false;
@@ -46,10 +46,9 @@ int captured_frame = 0;
 //----------------------------------------------------
 const double InitialViewPointX = 300.0;
 const double InitialViewPointY = -1000.0;
-const double InitialViewPointZ = 300.0;
+const double InitialViewPointZ = 500.0;
 const double ViewPointR = sqrt(InitialViewPointX * InitialViewPointX + InitialViewPointY * InitialViewPointY);
 const double ViewPointTheta = atan2(InitialViewPointY, InitialViewPointX);
-const double omega = 2.0 * PI * 0.1;
 
 //----------------------------------------------------
 // Rotation by mouse action
@@ -64,6 +63,7 @@ double rt[16];              // Rotation transform matrix
 int mouse_button_on = -1;
 
 unsigned int listNumber;
+vector<double> center_point(3, 0.0);
 
 //----------------------------------------------------
 // Texture
@@ -187,9 +187,9 @@ void Initialize(void){
 
   //Viewpoint
   gluLookAt(
-      InitialViewPointX, InitialViewPointY, InitialViewPointZ, // Viewpoint: x,y,z;
-      300.0,        0.0,        0.0,        // Reference point: x,y,z
-      0.0,        0.0,        1.0 );        //Vector: x,y,z
+      InitialViewPointX, InitialViewPointY, InitialViewPointZ,  // Viewpoint: x,y,z;
+      InitialViewPointX,        0.0,        0.0,                // Reference point: x,y,z
+      0.0,        0.0,        1.0 );                            //Vector: x,y,z
 
   // Initialize rotate matrix
   qrot(rt, cq);
@@ -201,19 +201,21 @@ void Initialize(void){
 void Display(void) {
   //Clear buffer.
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
+  if(t > 0.0) _Rec = true;
   // Set a viewpoint------------------------------------------------
   if(_AutoView){
 
-    vector<double> center_point(3, 0.0);
-    for (int i=0; i<N_MASS; i++)center_point = add(center_point, mass[i].p);
+    center_point = {0.0, 0.0, 0.0};
+    for (int i=0; i<N_MASS; i++)center_point = add(center_point, robots[0][i].p);
     center_point = scaling(center_point, SCALE/N_MASS);
 
     // Set a perspective projection matrix ------------------------------
+    /*
     glMatrixMode(GL_PROJECTION);//Matrix mode (GL PROJECTION: Perspective projection matrix)
     glLoadIdentity();//Initialize a matrix
-    gluPerspective(30.0, (double)WindowWidth/(double)WindowHeight, 0.1, 1000.0); //Apparent volume gluPerspactive(th, w/h, near, far);
-
+    gluPerspective(30.0, (double)WindowWidth/(double)WindowHeight, 0.1, 2000.0); //Apparent volume gluPerspactive(th, w/h, near, far);
+    _Rec = true;
+    double omega = 2.0 * PI * 0.1;
     double ViewPointX = ViewPointR * cos( omega * t + ViewPointTheta) + center_point[0];
     double ViewPointY = ViewPointR * sin( omega * t + ViewPointTheta) + center_point[1];
     double ViewPointZ = InitialViewPointZ;
@@ -221,9 +223,21 @@ void Display(void) {
       ViewPointX, ViewPointY, ViewPointZ,           // Viewpoint: x,y,z;
       center_point[0], center_point[1], 0.0,     // Reference point: x,y,z
       0.0,        0.0,        1.0 );                //　Vector: x,y,z
+    */
 
-  GLfloat light_position0[] = { (GLfloat) ViewPointX, (GLfloat) ViewPointY, (GLfloat) ViewPointZ, 1.0 }; //Coordinate of a light source 0
-  glLightfv(GL_LIGHT0, GL_POSITION, light_position0);
+    double shift=0.0;
+    if(t > 3.0) shift = 100.0 * (t-3.0);
+    double ViewPointX = InitialViewPointX + shift;
+    double ViewPointY = InitialViewPointY;
+    double ViewPointZ = InitialViewPointZ;
+    gluLookAt(
+      ViewPointX,                 ViewPointY,  ViewPointZ,      // Viewpoint: x,y,z;
+      InitialViewPointX + shift,  0.0,         0.0,             // Reference point: x,y,z
+      0.0,                        0.0,         1.0 );           //　Vector: x,y,z
+
+    GLfloat light_position0[] = { (GLfloat) ViewPointX, (GLfloat) ViewPointY, (GLfloat) ViewPointZ, 1.0 }; //Coordinate of a light source 0
+    glLightfv(GL_LIGHT0, GL_POSITION, light_position0);
+
   }
 
   // Set a model view matrix --------------------------
@@ -241,11 +255,17 @@ void Display(void) {
   glEnable(GL_LIGHT1); //Use a light source 0
 
   // Objects -------------------------
-  if (_Hide){
-    CubicRobotSolid(mass);
-  }else{
-    CubicRobot(mass);
+
+  for(vector<Mass> robot: robots){
+    if(robot.size()!=0){
+      if (_Hide){
+        CubicRobotSolid(robot);
+      }else{
+        CubicRobot(robot);
+      }
+    }
   }
+
 
   // Shadow OFF -----------------------------
   glDisable(GL_LIGHTING);
@@ -262,16 +282,16 @@ void Display(void) {
   string str;
   str = "time = " + std::to_string(t);
   DISPLAY_TEXT(5, 95, str);
-  str = "frame = " + std::to_string(frame);
-  DISPLAY_TEXT(5, 90, str);
-  if (_Friction){str = "Friction: On";}else{str = "Friction: Off";}
-  DISPLAY_TEXT(25, 95, str);
-  if (_Damping){str = "Damping: On";}else{str = "Damping: Off";}
-  DISPLAY_TEXT(25, 90, str);
-  if (_Breathe){str = "Breathe: On";}else{str = "Breathe: Off";}
-  DISPLAY_TEXT(45, 95, str);
-  if (_Rec){str = "Rec.: On";}else{str = "Rec.: Off";}
-  DISPLAY_TEXT(45, 90, str);
+  //str = "frame = " + std::to_string(frame);
+  //DISPLAY_TEXT(5, 90, str);
+  //if (_Friction){str = "Friction: On";}else{str = "Friction: Off";}
+  //DISPLAY_TEXT(25, 95, str);
+  //if (_Damping){str = "Damping: On";}else{str = "Damping: Off";}
+  //DISPLAY_TEXT(25, 90, str);
+  //if (_Breathe){str = "Breathe: On";}else{str = "Breathe: Off";}
+  //DISPLAY_TEXT(45, 95, str);
+  //if (_Rec){str = "Rec.: On";}else{str = "Rec.: Off";}
+  //DISPLAY_TEXT(45, 90, str);
 
   // ------------------------------------------------------------------------
 
@@ -285,7 +305,9 @@ void Display(void) {
   //glutInitDisplayMode(GLUT_DOUBLE) enables "double buffering"
   glutSwapBuffers();
 
-  frame++ ;
+  if (!_Stop){
+    frame++ ;
+  }
 }
 
 
@@ -353,6 +375,14 @@ void Keyboard(unsigned char key, int x, int y){
       _Rec=false;
     }else{
       _Rec=true;
+    }
+    break;
+
+  case 's':
+    if (_Stop){
+      _Stop=false;
+    }else{
+      _Stop=true;
     }
     break;
 
@@ -477,7 +507,7 @@ void Ground(void) {
 // Draw Cubic Robot
 //----------------------------------------------------
 
-void CubicRobot(vector<Mass> mass){
+void CubicRobot(vector<Mass> robot){
   // Masses
   for(int i=0; i<N_MASS; i++){
     glPushMatrix();
@@ -493,7 +523,7 @@ void CubicRobot(vector<Mass> mass){
       glMaterialfv(GL_FRONT, GL_SHININESS, &ms_ruby.shininess);
     }
 
-    glTranslated(mass[i].p[0]*SCALE , mass[i].p[1]*SCALE , mass[i].p[2]*SCALE );
+    glTranslated(robot[i].p[0]*SCALE , robot[i].p[1]*SCALE , robot[i].p[2]*SCALE );
     glutSolidSphere(nodeRadius*SCALE, 20, 20);
     glPopMatrix();
   }
@@ -505,13 +535,15 @@ void CubicRobot(vector<Mass> mass){
     glPushMatrix();
 
     double dx = 0.3;
-    int color_index = (int) ((spring[i].l0 / springInitialRestlength[i] - (1.0 - dx)) * 5.0 / dx);
+    double length = calcDistance(mass[spring[i].masses[0]].p, mass[spring[i].masses[1]].p);
+    int color_index = (int) ((length / springInitialRestlength[i] - (1.0 - dx)) * 5.0 / dx);
+    //int color_index = (int) ((spring[i].l0 / springInitialRestlength[i] - (1.0 - dx)) * 5.0 / dx);
     if (color_index < 0) color_index = 0;
     if (color_index > 10) color_index = 10;
     glMaterialfv(GL_FRONT, GL_DIFFUSE, RdBu[color_index]);
 
-    vector<double> begin_pt = mass[spring[i].masses[0]].p;
-    vector<double> end_pt = mass[spring[i].masses[1]].p;
+    vector<double> begin_pt = robot[spring[i].masses[0]].p;
+    vector<double> end_pt = robot[spring[i].masses[1]].p;
     begin_pt = scaling(begin_pt, SCALE);
     end_pt = scaling(end_pt, SCALE);
     vector<double>vec = sub(end_pt, begin_pt);
@@ -527,10 +559,9 @@ void CubicRobot(vector<Mass> mass){
 }
 
 
-void CubicRobotSolid(vector<Mass> mass){
+void CubicRobotSolid(vector<Mass> robot){
 
   for (std::array<int, 8> vertex:vertices){
-
     glPushMatrix();
     //GLfloat color[] = {green[0], green[1], green[2], 0.1};
     glMaterialfv(GL_FRONT, GL_DIFFUSE, ms_pearl.diffuse);
@@ -543,9 +574,9 @@ void CubicRobotSolid(vector<Mass> mass){
 
       for (int i = 0; i < 4; ++i) {
         GLdouble scaled_vertex[3] =
-                {mass[vertex[face[j][i]]].p[0]*SCALE,
-                 mass[vertex[face[j][i]]].p[1]*SCALE,
-                 mass[vertex[face[j][i]]].p[2]*SCALE};
+                {robot[vertex[face[j][i]]].p[0]*SCALE,
+                 robot[vertex[face[j][i]]].p[1]*SCALE,
+                 robot[vertex[face[j][i]]].p[2]*SCALE};
         glVertex3dv(scaled_vertex);
       }
     }
@@ -556,13 +587,13 @@ void CubicRobotSolid(vector<Mass> mass){
     glBegin(GL_LINES);
     for (int i = 0; i < 12; ++i) {
       GLdouble scaled_vertex1[3] =
-                {mass[vertex[edge[i][0]]].p[0]*SCALE,
-                 mass[vertex[edge[i][0]]].p[1]*SCALE,
-                 mass[vertex[edge[i][0]]].p[2]*SCALE};
+                {robot[vertex[edge[i][0]]].p[0]*SCALE,
+                 robot[vertex[edge[i][0]]].p[1]*SCALE,
+                 robot[vertex[edge[i][0]]].p[2]*SCALE};
       GLdouble scaled_vertex2[3] =
-                {mass[vertex[edge[i][1]]].p[0]*SCALE,
-                 mass[vertex[edge[i][1]]].p[1]*SCALE,
-                 mass[vertex[edge[i][1]]].p[2]*SCALE};
+                {robot[vertex[edge[i][1]]].p[0]*SCALE,
+                 robot[vertex[edge[i][1]]].p[1]*SCALE,
+                 robot[vertex[edge[i][1]]].p[2]*SCALE};
       glVertex3dv(scaled_vertex1);
       glVertex3dv(scaled_vertex2);
     }
@@ -834,10 +865,6 @@ void fixed_view(int type){
     glMatrixMode(GL_PROJECTION);//Matrix mode (GL PROJECTION: Perspective projection matrix)
     glLoadIdentity();//Initialize a matrix
     gluPerspective(30.0, (double)WindowWidth/(double)WindowHeight, 0.1, 1000.0); //Apparent volume gluPerspactive(th, w/h, near, far);
-
-    vector<double> center_point(3, 0.0);
-    for (int i=0; i<N_MASS; i++)center_point = add(center_point, mass[i].p);
-    center_point = scaling(center_point, SCALE/N_MASS);
 
     double ViewPointX = 0.0;
     double ViewPointY = 0.0;

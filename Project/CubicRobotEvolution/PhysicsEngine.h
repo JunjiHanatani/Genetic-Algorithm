@@ -8,7 +8,7 @@ using std::vector;
 
 void PhysicsEngine(void);
 void EnergyRecord(void);
-void TrajectoryRecord(void);
+void TrajectoryRecord(int);
 
 extern int nt;
 extern double t;
