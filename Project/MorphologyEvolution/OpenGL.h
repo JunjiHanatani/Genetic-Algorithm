@@ -1,0 +1,57 @@
+#ifndef _OPENGL_H_
+#define _OPENGL_H_
+
+#include <string>
+#include <vector>
+#include "CubeGenerator.h"
+
+using std::string;
+using std::vector;
+
+void Initialize(void);
+void Display(void);
+void Idle(void);
+void Ground(void);
+void StaticObjects(void);
+void PopUpBall(void);
+void Keyboard(unsigned char, int, int);
+void SpecialKey(int, int, int);
+void DRAW_STRING(int, int, string, void*);
+void DISPLAY_TEXT(int, int, string);
+void capture(const string);
+void qmul(double[], const double[], const double[]);
+void qrot(double[], double[]);
+void mouse_motion(int, int);
+void mouse_on(int, int, int, int);
+void CubicRobot(vector<Mass>);
+void CubicRobotSolid(vector<Mass>);
+void TetraRobotSolid(vector<Mass>);
+void setSurface(vector<Mass>);
+void fixed_view(int);
+void glDrawAxisd(double);
+void getMatrix(void);
+void auto_view_tracking(int);
+vector<double> get_centroid(vector<Mass>);
+void drawSquareSurface(vector<Mass>);
+void drawTriangleSurface(vector<Mass>);
+
+// Window Setting
+extern const int WindowPositionX;  //Window x position
+extern const int WindowPositionY;  //Window y position
+extern const int WindowWidth;      //Window width
+extern const int WindowHeight;     //Window height
+extern const char WindowTitle[];   //Window title
+
+// Control
+extern bool _Friction;
+extern bool _Damping;
+extern bool _Breathe;
+extern bool _Stop;
+
+extern int frame;
+extern double dt_ms;
+extern vector<Mass> robots[10];
+
+extern vector<double> nudgeForce;
+extern int nudgeID;
+#endif
