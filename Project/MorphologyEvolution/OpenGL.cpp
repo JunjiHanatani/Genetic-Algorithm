@@ -29,26 +29,26 @@ const char WindowTitle[] = "Cubic Robot";  //Window title
 
 // Output video
 bool _Rec = false;
-bool _AutoView = false;
-bool _ControlView = true;
+bool _AutoView = true;
 int _Viewmode = 0;
 bool _Stop = false;
 bool _Friction = true;
 bool _Damping = true;
 bool _Breathe = false;
-
-vector<double> nudgeForce = {0.0, 0.0, 0.0};
 int nudgeID = -1;
 int captured_frame = 0;
+vector<double> nudgeForce = {0.0, 0.0, 0.0};
+vector<double> track_x;
+vector<double> track_y;
 
 //----------------------------------------------------
 // Initial Viewpoint
 //----------------------------------------------------
-const double InitialViewPointX = 0.0;
-const double InitialViewPointY = -500.0;
-const double InitialViewPointZ = 200.0;
-const double InitialRefPointX = InitialViewPointX;
-const double InitialRefPointY = 0.0;
+const double InitialViewPointX = 300.0; // 300.0;
+const double InitialViewPointY = -500.0; // -800.0;
+const double InitialViewPointZ = 300.0; // 600.0;
+const double InitialRefPointX = 0.0; // 300.0;
+const double InitialRefPointY = 0.0; // 200.0;
 const double InitialRefPointZ = 0.0;
 const double ViewPointR = sqrt(InitialViewPointX * InitialViewPointX + InitialViewPointY * InitialViewPointY);
 const double ViewPointTheta = atan2(InitialViewPointY, InitialViewPointX);
@@ -76,7 +76,6 @@ struct MaterialStruct {
   GLfloat specular[4];
   GLfloat shininess;
 };
-
 //jade
 MaterialStruct ms_jade = {
   {0.135,     0.2225,   0.1575,   1.0},
@@ -89,13 +88,12 @@ MaterialStruct ms_ruby  = {
   {0.61424,  0.04136,  0.04136,   1.0},
   {0.727811, 0.626959, 0.626959,  1.0},
   76.8};
-
+//white plastic
 MaterialStruct ms_white_plastic  = {
   {0.0,   0.0,     0.0,  1.0},
   {0.55,  0.55,    0.55, 1.0},
   {0.70,  0.70,    0.70, 1.0},
   32};
-
 // pearl
 MaterialStruct ms_pearl  = {
   {0.25,     0.20725,  0.20725,  1.0},
@@ -129,21 +127,6 @@ GLfloat RdBu[11][4] =
 // Edges, Faces, and Normal vectors.
 //----------------------------------------------------
 
-int edge[][2] = {
-  { 0, 1 },
-  { 1, 2 },
-  { 2, 3 },
-  { 3, 0 },
-  { 4, 5 },
-  { 5, 6 },
-  { 6, 7 },
-  { 7, 4 },
-  { 0, 4 },
-  { 1, 5 },
-  { 2, 6 },
-  { 3, 7 }
-};
-
 int outer_sq_face[][4] = {
   { 0, 1, 2, 3 }, /* A-B-C-D */
   { 1, 5, 6, 2 }, /* B-F-G-C */
@@ -172,7 +155,6 @@ int inner_tri_face[][3] = {
   { 2, 7, 5},
   { 3, 4, 6}
 };
-
 
 int tetra_face[][3] = {
   { 1, 0, 2},
@@ -215,12 +197,9 @@ void Initialize(void){
   //Set a light source --------------------------------------
   GLfloat light_position0[] = { 0.0, -300.0, 500.0, 1.0 }; //Coordinate of a light source 0
   GLfloat light_position1[] = { 0.0, -300.0, 0.0, 1.0 }; //Coordinate of a light source 0
-  //GLfloat light_direction1[] = { 0.0,  1.0,  0.0};
 
   glLightfv(GL_LIGHT0, GL_POSITION, light_position0); //
   glLightfv(GL_LIGHT1, GL_POSITION, light_position1); //
-  //glLightfv(GL_LIGHT1, GL_SPOT_DIRECTION, light_direction1); //
-
 
   // Create display list
   listNumber = glGenLists(1);
@@ -237,6 +216,10 @@ void Initialize(void){
       InitialViewPointX, InitialViewPointY, InitialViewPointZ,  // Viewpoint: x,y,z;
       InitialRefPointX,  InitialRefPointY,  InitialRefPointZ,   // Reference point: x,y,z
       0.0,        0.0,        1.0 );                            // Vector: x,y,z
+
+  // Alpha blend
+  //glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  //glEnable(GL_BLEND);
 
   // Initialize rotate matrix
   qrot(rt, cq);
@@ -255,7 +238,7 @@ void Display(void) {
 
   // Set a viewpoint------------------------------------------------
   if(_AutoView){
-    auto_view_tracking(1);
+    auto_view_tracking(0);
   }
 
   // Set a model view matrix --------------------------
@@ -263,9 +246,8 @@ void Display(void) {
   glLoadIdentity(); //Initialize a matrix
   glViewport(0, 0, WindowWidth, WindowHeight);
 
-
   // Rotation -------------------------
-  if(_ControlView) glMultMatrixd(rt);
+  glMultMatrixd(rt);
 
   //Shadow ON-----------------------------
   glEnable(GL_LIGHTING);
@@ -295,7 +277,6 @@ void Display(void) {
   glDrawAxisd(30);
   glPopMatrix();
 
-  // ---------------------------------
 
   // Draw characters. -------------------------------------------------------
   string str;
@@ -312,14 +293,12 @@ void Display(void) {
   //if (_Rec){str = "Rec.: On";}else{str = "Rec.: Off";}
   //DISPLAY_TEXT(45, 90, str);
 
-  // ------------------------------------------------------------------------
 
   // Output png. -------------------------------------------------------
   if(_Rec){
     string fname = "./png/" + std::to_string(10000 + captured_frame) + ".png";//Output file name.
     capture(fname);
   }
-  // ------------------------------------------------------------------------
 
   //glutInitDisplayMode(GLUT_DOUBLE) enables "double buffering"
   glutSwapBuffers();
@@ -352,7 +331,6 @@ void Keyboard(unsigned char key, int x, int y){
     break;
 
   case 'b':
-
     if (_Breathe){
       _Breathe=false;
     }else{
@@ -467,20 +445,6 @@ void Ground(void) {
     glLineWidth(1.0d);
     double dl = 30.0;
 
-    /*// Draw lines.
-    glBegin(GL_LINES);
-    // Horizontal lines.
-    for(double ly = -ground_max_y ;ly <= ground_max_y; ly+=dl){
-      glVertex3d(-ground_max_x, ly, 0);
-      glVertex3d(ground_max_x, ly, 0);
-    }
-    // Vertical lines.
-    for(double lx = -ground_max_x ;lx <= ground_max_x; lx+=dl){
-      glVertex3d(lx, ground_max_y,0);
-      glVertex3d(lx, -ground_max_y,0);
-    }
-    glEnd();
-    */
 
     glColor3d(0.9, 0.9, 0.9);  // Color of the ground
     glBegin(GL_QUADS);
@@ -524,6 +488,7 @@ void Ground(void) {
 //----------------------------------------------------
 
 void CubicRobot(vector<Mass> robot){
+
   // Masses
   for(int i=0; i<N_MASS; i++){
     if (robot[i].m==0.0) continue;
@@ -550,7 +515,9 @@ void CubicRobot(vector<Mass> robot){
   GLUquadricObj *bars[N_SPRING];
 
   for(int i=0; i<N_SPRING; i++){
-    if (spring[i].k ==0.0) continue;
+    if (robot[spring[i].masses[0]].m == 0.0 ||
+        robot[spring[i].masses[1]].m == 0.0) continue;
+
     glPushMatrix();
 
     /* --- Color setting --- */
@@ -603,10 +570,10 @@ void CubicRobotSolid(vector<Mass> robot){
     /* Material Color */
     //GLfloat color[] = {blue[0], blue[1], blue[2], 1.0};
     //glMaterialfv(GL_FRONT, GL_DIFFUSE, color);
-    glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, ms_pearl.diffuse);
-    glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, ms_pearl.ambient);
-    glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, ms_pearl.specular);
-    glMaterialfv(GL_FRONT_AND_BACK, GL_SHININESS, &ms_pearl.shininess);
+    glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, ms_jade.diffuse);
+    glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, ms_jade.ambient);
+    glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, ms_jade.specular);
+    glMaterialfv(GL_FRONT_AND_BACK, GL_SHININESS, &ms_jade.shininess);
 
     /* Draw surface */
     glBegin(GL_TRIANGLES);
@@ -1223,30 +1190,37 @@ void auto_view_tracking(int type){
 
     vector<double> center_point = get_centroid(robots[0]);
 
+    track_x.push_back(center_point[0]);
+    track_y.push_back(center_point[1]);
+    if (track_x.size()==101) track_x.erase(track_x.begin());
+    if (track_y.size()==101) track_y.erase(track_y.begin());
+    double ave_x = accumulate(track_x.begin(), track_x.end(), 0.0) / track_x.size();
+    double ave_y = accumulate(track_y.begin(), track_y.end(), 0.0) / track_y.size();
+
     // Set a perspective projection matrix ------------------------------
 
     if (type==0){
-      double omega = 2.0 * PI * 0.1;
-      ViewPointX = ViewPointR * cos( omega * t + ViewPointTheta) + center_point[0];
-      ViewPointY = ViewPointR * sin( omega * t + ViewPointTheta) + center_point[1];
+      double omega = 2.0 * PI * 0.0;
+      ViewPointX = ViewPointR * cos( omega * t + ViewPointTheta) + ave_x;
+      ViewPointY = ViewPointR * sin( omega * t + ViewPointTheta) + ave_y;
       ViewPointZ = InitialViewPointZ;
-      RefPointX  = center_point[0];
-      RefPointX  = center_point[1];
-      RefPointX  = 0.0;
+      RefPointX  = ave_x;
+      RefPointY  = ave_y;
+      RefPointZ  = 0.0;
     }
 
     else if(type==1){
-      double t0 = 3.0;
-      double shift_x = 100;
+      double t0 = 4.5;
+      double shift_x = 200;
       double shift_y = 0.0;
       double shift_z = 0.0;
       if(t > t0){;
-        ViewPointX = InitialViewPointX + shift_x * (t-t0);
-        ViewPointY = InitialViewPointY + shift_y * (t-t0);
-        ViewPointZ = InitialViewPointZ + shift_z * (t-t0);
-        RefPointX  = InitialRefPointX  + shift_x * (t-t0);
-        RefPointY  = InitialRefPointY  + shift_y * (t-t0);
-        RefPointX  = InitialRefPointZ  + shift_z * (t-t0);
+        ViewPointX += shift_x * (t-t0);
+        ViewPointY += shift_y * (t-t0);
+        ViewPointZ += shift_z * (t-t0);
+        RefPointX  += shift_x * (t-t0);
+        RefPointY  += shift_y * (t-t0);
+        RefPointX  += shift_z * (t-t0);
       }
     }
 

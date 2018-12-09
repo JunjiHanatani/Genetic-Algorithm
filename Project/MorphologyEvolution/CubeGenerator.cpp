@@ -567,7 +567,7 @@ vector<int> Decorder(vector<vector<double>> parameter_table, string REPRESENTATI
     }
 
 
-    for (double thresh=0.0; thresh<10.0; thresh+=0.1){
+    for (double thresh=0.0; thresh<50.0; thresh+=0.1){
 
       num_of_valid_springs = 0;
       vector<double> k_factor(N_SPRING, 0.0);

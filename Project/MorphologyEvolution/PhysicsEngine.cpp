@@ -250,7 +250,8 @@ void TrajectoryRecord(int slot){
                    << "id" << ","
                    << "x" << ","
                    << "y" << ","
-                   << "z" << endl;
+                   << "z" << ","
+                   << "m" << endl;
   }
 
   for (int i=0; i<N_MASS; i++){
@@ -258,7 +259,8 @@ void TrajectoryRecord(int slot){
                    << i << ","
                    << mass[i].p[0] << ","
                    << mass[i].p[1] << ","
-                   << mass[i].p[2] << endl;
+                   << mass[i].p[2] << ","
+                   << mass[i].m << endl;
   }
 
 }

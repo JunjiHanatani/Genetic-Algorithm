@@ -53,7 +53,7 @@ static int const AVE_RANGE_MIN = NT_MIN / NT_CYCLE;        // = 3;
 
 // -----------------------------------------------
 // CREATE INITIAL POPULATION
-// ------------------------------------------------
+// -----------------------------------------------
 
 vector<Individual> createInitialPop(int num){
 
@@ -79,18 +79,17 @@ vector<Individual> createInitialPop(int num){
         }else if(REPRESENTATION=="generative2"){
           double x = get_rand_range_dbl(-0.2, 0.2);//(range_min[0], range_max[0]);
           double y = get_rand_range_dbl( 0.0, 0.0);//(range_min[1], range_max[1]);
-          double z = get_rand_range_dbl(-0.1, 0.4);//(range_min[2], range_max[2]);
+          double z = get_rand_range_dbl( 0.0, 0.4);//(range_min[2], range_max[2]);
           // Eigen::Matrix3d m = Eigen::MatrixXd::Random(3,3) * sqrt(robot_diameter/6.0);
           // Eigen::Matrix3d sigma = m.transpose() * m;
-          double sx = get_rand_range_dbl(0.0, 0.1); //sigma(0, 0);
-          double sy = get_rand_range_dbl(0.0, 0.2); //sigma(1, 1);
-          double sz = get_rand_range_dbl(0.0, 0.1); //sigma(2, 2);
+          double sx = get_rand_range_dbl(0.0, 0.05); //sigma(0, 0);
+          double sy = get_rand_range_dbl(0.0, 0.1); //sigma(1, 1);
+          double sz = get_rand_range_dbl(0.0, 0.05); //sigma(2, 2);
           double sxy = 0.0;//sigma(0, 1);
           double syz = 0.0;//sigma(1, 2);
           double szx = 0.0;//sigma(0, 2);
           double thresh = 0.0;//get_rand_range_dbl(1.0, 3.0);
           ind.para.push_back({offset, amp, phase, kfactor, x, y, z, sx, sy, sz, sxy, syz, szx, thresh});
-
         }else{
           double exist = (double) get_rand_range_int(0, 1);
           ind.para.push_back({offset, amp, phase, kfactor, exist});
@@ -283,10 +282,9 @@ vector<double> calcTraveleLength(vector<vector<double>> &center_list){
   vector<double> results;
 
   if (!std::isnan(center_list[0][0])){
-
     /* --- Calc. travel length --- */
     //distance = calcDistance(center_list[0], center_list.back());
-    distance = center_list[SIZE_TRAJECTORY][0] - center_list[AVE_RANGE_MIN][0];
+    distance = center_list[SIZE_TRAJECTORY-1][0] - center_list[AVE_RANGE_MIN][0];
 
     /* --- Calc. error --- */
     vector<double> z_list, y_list, x_list;
@@ -825,7 +823,7 @@ void EvolveCube(void){
     ofs_log << " ----- INITIAL POPULATION ----- " << endl;
     vector<Individual> pops[N_LAYERS];
     if(rank==0) pops[0] = createInitialPop(N_POP);
-
+    ofs_log << "Done." << endl;
 
     /* ----------------- Evaluation. ------------- */
     ofs_log << "  EVALUATION ";

@@ -25,7 +25,7 @@ double dt_ms = 1;
 vector<Mass> robots[10];
 vector<vector<double>> df_robots[10];
 int N_ROBOTS;
-double END_TIME = 100.0;
+double END_TIME = 10.0;
 bool save=false;
 int slot;
 
@@ -182,7 +182,7 @@ void timerPhysicsEngine(int value){
   // Call timer function after 100ms.
   glutTimerFunc(dt_ms, timerPhysicsEngine, 0);
 
-  if (nt%60 == 0){
+  if (nt%20 == 0){
     glutPostRedisplay();
     if (save){
       TrajectoryRecord(slot);
@@ -207,11 +207,12 @@ void timerMultiRobots(int value){
   int FIN = INI + N_MASS;
 
   for (int i=0; i<N_ROBOTS; i++){
-    vector<double> offset = {0.0, (double)i*0.5, 0.0};
+    vector<double> offset = {0.0, -0.3 + (double)i*1.0, 0.0};
     for (int j=INI; j<FIN; j++){
       robots[i][j-INI].p = {df_robots[i][j][2] + offset[0],
                             df_robots[i][j][3] + offset[1],
                             df_robots[i][j][4] + offset[2]};
+      robots[i][j-INI].m = df_robots[i][j][5];
     }
   }
 
@@ -251,6 +252,7 @@ void readMotionFile(char* folder){
   vector<string> filenames;
   vector<string> strvec = get_filename(folder);
 
+  /* Filenames */
   for (string str: strvec) {
     string keyword = "robot";
     if (std::equal(keyword.begin(), keyword.end(), str.begin())){
@@ -260,6 +262,8 @@ void readMotionFile(char* folder){
 
   N_ROBOTS = filenames.size();
   cout << "Num of robots: " << N_ROBOTS << endl;
+
+  /* Read files and store data -> df_robots[i] (for ith robot) */
   for (int i=0; i<N_ROBOTS; i++){
     df_robots[i] = read_csv(filenames[i], 1, -1);
     double end_time = df_robots[i].back()[0];
